@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  generationTimeoutMs: parseInt(process.env.GENERATION_TIMEOUT_MS || '600000', 10),
 
   // SQLite database
   database: {

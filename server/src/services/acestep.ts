@@ -1201,7 +1201,7 @@ interface PythonResult {
 function runPythonGeneration(
   scriptArgs: string[],
   onLogLine?: (line: string) => void,
-  timeoutMs = 600000,
+  timeoutMs = config.generationTimeoutMs,
 ): Promise<PythonResult> {
   return new Promise((resolve) => {
     const pythonPath = resolvePythonPath(ACESTEP_DIR);

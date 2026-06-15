@@ -28,6 +28,7 @@ const VideoGeneratorModal = React.lazy(() =>
 
 const SONGS_PAGE_SIZE = 80;
 const MAX_RESUMABLE_JOB_AGE_MS = 3 * 60 * 60 * 1000;
+const GENERATION_TIMEOUT_MS = Number(process.env.GENERATION_TIMEOUT_MS || 600000);
 
 const StartupLoading: React.FC<{ progress: number }> = ({ progress }) => (
   <div className="flex h-screen w-screen items-center justify-center bg-suno-DEFAULT text-white">
@@ -991,7 +992,7 @@ function AppContent() {
         cleanupJob(jobId, tempId);
         showToast(t('generationTimedOut'), 'error');
       }
-    }, 600000);
+    }, GENERATION_TIMEOUT_MS);
   }, [token, cleanupJob, refreshSongsList]);
 
   const buildTempSongFromParams = (params: GenerationParams, tempId: string, createdAt?: Date): Song => ({

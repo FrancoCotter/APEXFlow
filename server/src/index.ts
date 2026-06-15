@@ -545,6 +545,7 @@ app.listen(config.port, '0.0.0.0', () => {
   console.log(`ACEStudio Server running on http://localhost:${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`ACE-Step API: ${config.acestep.apiUrl}`);
+  console.log(`Generation timeout: ${Math.round(config.generationTimeoutMs / 1000)}s`);
 
   // Show LAN access info
   import('os').then(os => {

@@ -41,7 +41,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.GENERATION_TIMEOUT_MS': JSON.stringify(env.GENERATION_TIMEOUT_MS || '600000')
     },
     resolve: {
       alias: {
