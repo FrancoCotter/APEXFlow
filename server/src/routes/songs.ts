@@ -119,13 +119,14 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
               s.duration, s.bpm, s.key_scale, s.time_signature, s.tags, s.is_public, 
               s.like_count, s.view_count, s.user_id, s.created_at, s.generation_params,
               COALESCE(u.username, 'Anonymous') as creator,
-              false as is_liked
+              CASE WHEN ls.song_id IS NOT NULL THEN true ELSE false END as is_liked
        FROM songs s
        LEFT JOIN users u ON s.user_id = u.id
+       LEFT JOIN liked_songs ls ON ls.song_id = s.id AND ls.user_id = $1
        WHERE s.user_id = $1
        ORDER BY s.created_at DESC
        ${hasPagination ? 'LIMIT $2 OFFSET $3' : ''}`,
-      hasPagination ? [req.user!.id, limit, offset] : [req.user!.id]
+      hasPagination ? [req.user!.id, req.user!.id, limit, offset] : [req.user!.id, req.user!.id]
     );
 
     const songs = await Promise.all(
@@ -148,17 +149,20 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
 });
 
 // Get featured songs (random songs for discover page)
-router.get('/public/featured', optionalAuthMiddleware, async (_req: AuthenticatedRequest, res: Response) => {
+router.get('/public/featured', optionalAuthMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Return random songs - for local app, show all songs randomly
     const result = await pool.query(
       `SELECT s.id, s.title, s.lyrics, s.style, s.caption, s.cover_url, s.audio_url,
               s.duration, s.bpm, s.key_scale, s.time_signature, s.tags, s.like_count, s.view_count, s.created_at, s.user_id,
-              COALESCE(u.username, 'Anonymous') as creator, u.avatar_url as creator_avatar, s.generation_params
+              COALESCE(u.username, 'Anonymous') as creator, u.avatar_url as creator_avatar, s.generation_params,
+              CASE WHEN ls.song_id IS NOT NULL THEN true ELSE false END as is_liked
        FROM songs s
        LEFT JOIN users u ON s.user_id = u.id
+       LEFT JOIN liked_songs ls ON ls.song_id = s.id AND ls.user_id = $1
        ORDER BY RANDOM()
-       LIMIT 20`
+       LIMIT 20`,
+      [req.user?.id || null]
     );
 
     const songs = await Promise.all(
@@ -182,7 +186,8 @@ router.get('/public/featured', optionalAuthMiddleware, async (_req: Authenticate
         creator_avatar: row.creator_avatar,
         user_id: row.user_id,
         generation_params: row.generation_params,
-        is_public: true
+        is_public: true,
+        is_liked: row.is_liked
       }))
     );
 
@@ -202,13 +207,15 @@ router.get('/public', optionalAuthMiddleware, async (req: AuthenticatedRequest, 
     const result = await pool.query(
       `SELECT s.id, s.title, s.lyrics, s.style, s.caption, s.cover_url, s.audio_url,
               s.duration, s.bpm, s.key_scale, s.time_signature, s.tags, s.like_count, s.created_at,
-              COALESCE(u.username, 'Anonymous') as creator, s.generation_params
+              COALESCE(u.username, 'Anonymous') as creator, s.generation_params,
+              CASE WHEN ls.song_id IS NOT NULL THEN true ELSE false END as is_liked
        FROM songs s
        LEFT JOIN users u ON s.user_id = u.id
+       LEFT JOIN liked_songs ls ON ls.song_id = s.id AND ls.user_id = $3
        WHERE s.is_public = true
        ORDER BY s.created_at DESC
        LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      [limit, offset, req.user?.id || null]
     );
 
     const songs = await Promise.all(
@@ -231,11 +238,13 @@ router.get('/:id', optionalAuthMiddleware, async (req: AuthenticatedRequest, res
     const result = await pool.query(
       `SELECT s.id, s.user_id, s.title, s.lyrics, s.style, s.caption, s.cover_url, s.audio_url,
               s.duration, s.bpm, s.key_scale, s.time_signature, s.tags, s.is_public, s.like_count, s.view_count, s.created_at,
-              COALESCE(u.username, 'Anonymous') as creator, u.avatar_url as creator_avatar, s.generation_params
+              COALESCE(u.username, 'Anonymous') as creator, u.avatar_url as creator_avatar, s.generation_params,
+              CASE WHEN ls.song_id IS NOT NULL THEN true ELSE false END as is_liked
        FROM songs s
        LEFT JOIN users u ON s.user_id = u.id
+       LEFT JOIN liked_songs ls ON ls.song_id = s.id AND ls.user_id = $2
        WHERE s.id = $1`,
-      [req.params.id]
+      [req.params.id, req.user?.id || null]
     );
 
     if (result.rows.length === 0) {
@@ -271,11 +280,13 @@ router.get('/:id/full', optionalAuthMiddleware, async (req: AuthenticatedRequest
         `SELECT s.id, s.user_id, s.title, s.lyrics, s.style, s.caption, s.cover_url, s.audio_url,
                 s.duration, s.bpm, s.key_scale, s.time_signature, s.tags, s.is_public,
                 s.like_count, s.view_count, s.created_at, s.generation_params,
-                COALESCE(u.username, 'Anonymous') as creator, u.avatar_url as creator_avatar
+                COALESCE(u.username, 'Anonymous') as creator, u.avatar_url as creator_avatar,
+                CASE WHEN ls.song_id IS NOT NULL THEN true ELSE false END as is_liked
          FROM songs s
          LEFT JOIN users u ON s.user_id = u.id
+         LEFT JOIN liked_songs ls ON ls.song_id = s.id AND ls.user_id = $2
          WHERE s.id = $1`,
-        [req.params.id]
+        [req.params.id, req.user?.id || null]
       ),
       pool.query(
         `SELECT c.id, c.content, c.created_at, c.updated_at,
@@ -514,7 +525,8 @@ router.get('/liked/list', authMiddleware, async (req: AuthenticatedRequest, res:
     const result = await pool.query(
       `SELECT s.id, s.title, s.lyrics, s.style, s.cover_url, s.audio_url,
               s.duration, s.tags, s.like_count, s.view_count, s.created_at, s.is_public,
-              COALESCE(u.username, 'Anonymous') as creator, s.generation_params
+              COALESCE(u.username, 'Anonymous') as creator, s.generation_params,
+              true as is_liked
        FROM liked_songs ls
        JOIN songs s ON ls.song_id = s.id
        LEFT JOIN users u ON s.user_id = u.id

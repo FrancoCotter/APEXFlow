@@ -259,6 +259,7 @@ function AppContent() {
 
   const handleShowDetails = (song: Song) => {
     setSelectedSong(song);
+    hydrateSongDetails(song);
     setShowMobileDetails(true);
   };
 
