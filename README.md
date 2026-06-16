@@ -57,71 +57,36 @@ for people who want to run ACE-Step on their own machine.
 
 ---
 
-## ✨ What Changed
+## 🎬 Quick Demo
 
-This fork is no longer only a small UI tweak. The current version changes the
-generation flow, local fallback behavior, lyrics handling, playback UX, video
-tools, and overall product direction.
-
-### 🧠 Generation and ACE-Step Integration
-
-- Updated parameter mapping for newer ACE-Step 1.5 payloads.
-- Added stronger Python fallback support when Gradio is unavailable or too
-  memory-heavy.
-- Improved ACE-Step path resolution through `ACESTEP_PATH`, sibling-folder
-  detection, and local environment configuration.
-- Added support for newer DiT model labels such as `1.5T` and `1.5XL-T` in the
-  library UI.
-- Added safer handling for LLM / thinking mode options and user-facing VRAM
-  hints.
-- Added score parsing for ACE-Step scorer output, including global PMI quality
-  and lyric alignment scores when available.
-
-### 🎙️ Lyrics
-
-- Added LRC / WebVTT loading, parsing, and conversion.
-- Added static lyrics fallback when no synced lyrics are available.
-- Cleaned section labels such as `[Verse]`, `[Chorus]`, `[Bridge]`, and
-  instrumental-only tags from display output.
-- Added dynamic lyrics in Song Profile and fullscreen playback.
-- Added clickable synced lyric lines for seeking.
-- Added persistent in-session lyrics visibility while navigating between songs.
-- Added LRC badges in song lists only when a real synced lyric file exists.
-
-### 🎛️ Playback and Library UX
-
-- Reworked the bottom player and fullscreen player behavior.
-- Added cover-color based fullscreen backgrounds.
-- Improved cover caching and preloading for smoother next / previous switching.
-- Improved view count / play count consistency between Song Profile and Song
-  Details.
-- Removed accidental play behavior from library rows so playback starts from
-  explicit play controls.
-- Added better selection and bulk-delete controls in the workspace list.
-- Removed the old SaaS-like sign-out emphasis for a more local-tool feel.
-
-### 🎬 Video Studio
-
-- Expanded the video generator modal with more practical controls.
-- Improved Pexels search behavior, paging, and search reset behavior.
-- Preserved selected media while resetting the search modal state.
-- Added random color preset generation with filtered palettes.
-- Improved lyric rendering in exported videos.
-- Preserved video motion instead of reducing selected video media to static
-  imagery where possible.
-
-### 🎨 Visual Direction
-
-- Renamed the UI direction to APEXFlow.
-- Forced the app into a dark, local-studio default.
-- Reworked many active colors away from bright pink / purple toward muted green
-  and Morandi-inspired tones.
-- Updated the sidebar logo, badges, buttons, sliders, likes, and active states.
-- Added desktop-only gating for touch/mobile layouts that are not yet designed.
-- Reworked Settings / About to credit both the local customization and the
-  original project.
+<!-- ![APEXFlow Demo](docs/demo.gif) -->
+<!-- If you recorded a high-quality .mov, uncomment the video player tag below instead: -->
+<video autoplay loop muted playsinline src="docs/output.mp4" width="100%"></video>
 
 ---
+
+## ✨ What Changed
+
+This fork transforms the original client into a streamlined, local-first music station. The key changes focus on model flexibility, generation parameters, lyrics review, and minimalist design:
+
+### 🧠 Generation & Model Optimizations
+* **Multiple Model Support**: Choose between different DiT checkpoints (Turbo vs. Base/SFT).
+* **Community VAE Support**: Select custom VAE checkpoints such as [ScragVAE](https://huggingface.co/scragnog/Ace-Step-1.5-ScragVAE) for significantly crisper transients and clearer vocals.
+* **Smart Parameter Auto-settings**: Step counts and DCW (Double Classifier-Free Guidance Wrap) settings automatically follow the selected model family (e.g., Turbo sets 8 steps and enables DCW; Base/SFT defaults to 50 steps and disables DCW to prevent audio artifacts).
+* **Official Examples**: Pre-integrated official generation examples to get you started immediately.
+
+### 🎙️ Lyrics & Scoring Integration
+* **Score & Synced LRC Sync**: Fully connected backend scoring (quality metrics) and LRC synced lyric generation.
+  * > [!WARNING]
+  * > **Memory Hint**: If your GPU VRAM is limited (e.g., 4GB–8GB), it is **not recommended** to enable both **Score** and **LRC** simultaneously during generation. This saves memory and prevents Python fallback from running out of VRAM.
+  * > [!NOTE]
+  * > **LRC & CoT Alignment**: For high-quality synced lyrics, LRC generation **must be paired with Thinking Mode (CoT)** enabled. Enabling CoT allows the model to correctly reason about and output accurate timeline timestamps matching the vocals.
+* **Karaoke Mode**: Synced LRC lyrics activate an interactive, Karaoke-style scrolling display in fullscreen playback.
+* **Click-to-Seek**: Click on any scrolling lyric line to jump the player directly to that part of the song.
+
+### 🎨 Clean & Minimalist Design
+* **Interface Cleanup**: Removed unnecessary, irrelevant icons and clutter from the player and sidebar to ensure a focused, local-first studio workspace.
+* **Liquid Cover Backgrounds**: Fully reworked the fullscreen visualizer with liquid gradients generated dynamically from the active song's cover art.
 
 ## 🚀 Features
 
@@ -131,9 +96,10 @@ tools, and overall product direction.
 | **ACE-Step modes** | Gradio API path plus Python fallback path for local workflows |
 | **Lyrics** | Static lyrics, dynamic LRC/VTT lyrics, clickable seek, fullscreen lyric stage |
 | **Library** | Search, likes, playlists, song details, play counts, cached covers |
-| **Video Studio** | Pexels search, visual presets, lyric rendering, random color palettes |
 | **Scores** | ACE-Step diagnostic score display when scorer output is available |
 | **Local-first data** | SQLite database, local audio files, local cover cache |
+
+*Note: APEXFlow also includes secondary utilities like a basic **Video Studio** (which supports Pexels stock video search, visual preset overlays, and dynamic LRC lyric rendering on exported videos) and built-in **Audio Editor** / **Stem Separation** links.*
 
 ---
 
@@ -143,188 +109,172 @@ APEXFlow is currently a local personal fork rather than a polished upstream
 release. It works best as a desktop app running on the same machine as your
 ACE-Step environment.
 
-Recommended use:
+---
 
-- Desktop browser.
-- Local backend.
-- ACE-Step 1.5 installed separately.
-- Python fallback for lower-VRAM workflows.
-- Gradio API when your machine has enough VRAM and the backend is stable.
+## ⚙️ Generation Modes: Python Fallback vs. Gradio API
+
+APEXFlow supports two generation backends. Each has distinct technical trade-offs:
+
+### 1. Python Fallback Mode (Recommended for Daily Local Use)
+If the backend does not detect a running Gradio API server, it automatically runs Python generation by spawning a local Python subprocess.
+* **Benefits**:
+  * **Smooth UI Progress Tracking**: The Express backend parses stdout/stderr lines to update precise stages (`Thinking about metadata...`, `Running diffusion...`) and smooth progress percentages in the UI.
+  * **Auto VRAM Releasing**: The Python process exits immediately after generation, completely freeing GPU memory so you can play games, run Stable Diffusion, or use other AI tools without VRAM bottlenecks.
+  * **Zero Setup**: You only need to run APEXFlow. No need to start the separate ACE-Step Gradio server process in the background.
+* **Drawbacks**:
+  * **Cold-Start Latency**: Every song pays a 15–20s penalty to boot the Python environment and reload PyTorch/model checkpoints into VRAM.
+
+### 2. Gradio API Mode (Recommended for Generation Sprints)
+To enable, start the official ACE-Step Gradio API server in the background (Default: `http://localhost:8001` with `--enable-api` flag).
+* **Benefits**:
+  * **Warm Model (Rapid Generation)**: Checkpoints remain loaded in GPU memory. Consecutive generations start instantly (saving 15–20s of loading time per song).
+  * **Distributed Setup**: You can run the heavy ACE-Step Gradio server on a remote GPU server or a dedicated desktop in your LAN, and connect to it from a lightweight laptop.
+* **Drawbacks**:
+  * **Static Progress**: The API call is synchronous. The progress bar in the UI will stay at `3%` (`Generating music via Gradio...`) and jump directly to `100%` when finished.
+  * **Persistent VRAM Usage**: GPU memory remains occupied as long as the Gradio server is running.
 
 ---
 
-## 📋 Requirements
+## 📋 Requirements & VRAM Guidelines
 
+### System Requirements
 | Requirement | Notes |
 | --- | --- |
 | **Node.js** | 18 or newer |
 | **Python** | 3.10+ / 3.11 recommended |
 | **ACE-Step 1.5** | Required for real generation |
 | **FFmpeg** | Recommended for audio metadata and processing |
-| **GPU** | NVIDIA CUDA recommended; lower VRAM works better with fallback / PT mode |
-| **Pexels API key** | Optional, only needed for Pexels video/image search |
+| **GPU** | NVIDIA CUDA recommended |
+| **Pexels API key** | Optional (needed for Video Studio background searches) |
+
+### ⚡ GPU VRAM Guidelines
+ACE-Step 1.5 dynamically scales and adapts to your hardware using CPU offloading and INT8 quantization:
+* **≤ 4GB VRAM (Entry Level)**:
+  * Runs with aggressive CPU offloading and quantization.
+  * **Recommendations**: Use standard/turbo models (e.g. `acestep-v15-turbo`) only. Keep batch size at **1**, and **turn off Thinking Mode** (Chain-of-Thought) to bypass loading the language model planner.
+* **6GB – 8GB VRAM (Mid-Range)**:
+  * Supports standard models.
+  * Supports **Thinking Mode** using the smaller **0.6B LM planner**.
+  * Uses the PyTorch (`pt`) backend by default (since `vllm` requires 8GB+).
+* **8GB – 16GB VRAM (Performance Tier)**:
+  * Supports standard models and newer **XL models** (XL models require ~9GB for weights, minimum **12GB VRAM recommended**).
+  * Supports **Thinking Mode** with the standard **1.7B LM planner**.
+  * Enables high-speed generation using the **`vllm` backend**.
+* **≥ 20-24GB VRAM (Enthusiast / XL Tier)**:
+  * Full unconstrained support for XL models, the largest **4B LM planner** in Thinking Mode, batch size **up to 4**, and full-length tracks (4+ minutes) with minimal offloading.
 
 ---
 
-## ⚙️ Setup
+## ⚙️ Step-by-Step Setup Tutorial
 
-APEXFlow keeps the original script-based setup flow. The scripts install
-frontend dependencies, install backend dependencies, create `server/.env` when
-needed, and prepare the local data folder.
+Follow these steps to configure your local environment:
 
-### Windows
+### Step 1: Preparation (ACE-Step 1.5)
+1. Clone the [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) repository to any folder on your machine.
+2. Download your favorite model checkpoints and place them inside the `checkpoints/` folder of the cloned `ACE-Step-1.5` repository.
 
-```batch
-cd ace-step-ui
-setup.bat
-```
+### Step 2: Establish Directory Mapping (Symlink or Env Config)
+By default, the backend server auto-detects `ACE-Step-1.5` inside the project root directory (e.g. `APEXFlow/ACE-Step-1.5`). You can link your external `ACE-Step-1.5` folder inside the `APEXFlow` directory:
 
-### macOS / Linux
+* **Windows** (Run Command Prompt as Administrator):
+  ```batch
+  cd APEXFlow
+  mklink /d ACE-Step-1.5 D:\ACE-Step-1.5
+  ```
+* **macOS / Linux**:
+  ```bash
+  cd APEXFlow
+  ln -s /path/to/your/cloned/ACE-Step-1.5 ACE-Step-1.5
+  ```
 
-```bash
-cd ace-step-ui
-chmod +x setup.sh start.sh start-all.sh stop-all.sh
-./setup.sh
-```
+* **Alternative (No Symlink)**: You can simply edit `server/.env` after Step 3 and set the absolute path directly:
+  ```env
+  ACESTEP_PATH=D:\ACE-Step-1.5
+  ```
 
-By default, the scripts look for ACE-Step 1.5 next to this folder:
+### Step 3: Install Dependencies
+Navigate into the `APEXFlow` directory and run the installation script:
 
-```text
-../ACE-Step-1.5
-```
-
-If your ACE-Step folder is somewhere else, set `ACESTEP_PATH` before running the
-scripts.
-
-Windows:
-
-```batch
-set ACESTEP_PATH=C:\path\to\ACE-Step-1.5
-setup.bat
-```
-
-macOS / Linux:
-
-```bash
-export ACESTEP_PATH=/path/to/ACE-Step-1.5
-./setup.sh
-```
-
-Important backend environment values live in `server/.env`:
-
-```env
-PORT=3001
-FRONTEND_PORT=3000
-DATABASE_PATH=./data/acestep.db
-ACESTEP_API_URL=http://localhost:8001
-ACESTEP_PATH=/path/to/ACE-Step-1.5
-PYTHON_PATH=/path/to/python
-PEXELS_API_KEY=optional_key_here
-```
-
-On macOS, `ACESTEP_PATH` can also point to a symlink created with `ln -s`, as
-long as the resolved path contains the ACE-Step source and its Python
-environment can run generation.
+* **Windows**:
+  ```batch
+  cd APEXFlow
+  setup.bat
+  ```
+* **macOS / Linux**:
+  ```bash
+  cd APEXFlow
+  chmod +x setup.sh start.sh start-all.sh stop-all.sh
+  ./setup.sh
+  ```
 
 ---
 
-## ▶️ Running
+## ▶️ Running & Enjoying Music
 
-There are two normal ways to run the app.
+Choose how you want to run the application. **Option A (Python Fallback)** is highly recommended for standard local desktop workflows.
 
-### Option A: Start Everything With One Script
+### Option A: Python Fallback Mode (Primary - Recommended ⭐️)
+Use this option to launch APEXFlow directly. There is no need to start any separate backend server manually.
+* **Windows**:
+  ```batch
+  cd APEXFlow
+  start.bat
+  ```
+* **macOS / Linux**:
+  ```bash
+  cd APEXFlow
+  ./start.sh
+  ```
 
-Use this when you want the script to launch ACE-Step API, backend, and frontend
-together.
+Once launched, open **`http://localhost:3000`** in your browser and enjoy creating music!
+* *Why it is recommended*: You get detailed, real-time stage progress updates in the UI, and your GPU memory is automatically freed immediately after each song generates.
 
-Windows:
+### Option B: Gradio API Mode (Alternative ⚠️)
+Use this option if you prefer to keep the model preloaded in VRAM for rapid consecutive generations, or if you are connecting to a remote machine on your LAN.
 
-```batch
-cd ace-step-ui
-start-all.bat
-```
+1. **Start the ACE-Step 1.5 Gradio Server first** (in your `ACE-Step-1.5` directory):
+   * *Standard Python setup*:
+     ```bash
+     uv run acestep --port 8001 --enable-api --backend pt --server-name 127.0.0.1
+     ```
+   * *Windows Portable build*:
+     ```batch
+     python_embeded\python -m acestep --port 8001 --enable-api --backend pt --server-name 127.0.0.1
+     ```
+2. **Start the APEXFlow UI** (in the `APEXFlow` directory):
+   * *Windows*: run `start.bat`
+   * *macOS / Linux*: run `./start.sh`
 
-macOS / Linux:
+> [!WARNING]
+> When using Gradio API Mode, the synchronous connection prevents the Node backend from reading real-time logs. The progress bar in the UI will stay static at `3%` (`Generating music via Gradio...`) and jump directly to `100%` when completed. Additionally, GPU VRAM remains occupied as long as the Gradio server runs.
 
-```bash
-cd ace-step-ui
-./start-all.sh
-```
-
-The all-in-one script starts:
-
-| Service | URL |
-| --- | --- |
-| ACE-Step API | http://localhost:8001 |
-| Backend | http://localhost:3001 |
-| Frontend | http://localhost:3000 |
-
-### Option B: Start ACE-Step Yourself, Then Start APEXFlow
-
-Use this when you prefer to launch ACE-Step manually, or when you want more
-control over backend, model, and VRAM settings.
-
-Start ACE-Step API first.
-
-Standard install:
-
-```bash
-cd /path/to/ACE-Step-1.5
-uv run acestep --port 8001 --enable-api --backend pt --server-name 127.0.0.1
-```
-
-Windows portable ACE-Step build:
-
-```batch
-cd C:\ACE-Step-1.5
-python_embeded\python -m acestep --port 8001 --enable-api --backend pt --server-name 127.0.0.1
-```
-
-Then start APEXFlow.
-
-Windows:
-
-```batch
-cd ace-step-ui
-start.bat
-```
-
-macOS / Linux:
-
-```bash
-cd ace-step-ui
-./start.sh
-```
-
-Open:
-
-```text
-http://localhost:3000
-```
-
-To stop services launched by the macOS / Linux all-in-one script:
-
+To stop the services on macOS / Linux:
 ```bash
 ./stop-all.sh
 ```
 
 ---
 
-## 🗂️ Local Data
+## 🗂️ Local Data & Backups
 
-Generated songs, cached covers, databases, and uploaded audio are local runtime
-data. Before sharing this folder with someone else, usually remove:
+Generated songs, cached covers, databases, and uploaded audio are completely local.
 
-- `node_modules/`
-- `server/node_modules/`
+### 💾 Backup & Migration Guide
+If you need to format your system, update APEXFlow, or migrate your library to another machine:
+* **Your Library Database**: All metadata, playlist records, likes, and settings reside in `server/data/acestep.db`. Copy this database file to backup.
+* **Your Audio Files**: Generated audio, reference files, and covers are saved in `server/public/audio/` and `server/public/covers/`. Copy these directories.
+* To restore on a new setup, simply place these files back in their respective directories before launching setup.
+
+### 🧹 Cleanup for Sharing
+Before sharing your project folder with others, make sure to clean up personal data. Delete the following:
+- `node_modules/` and `server/node_modules/`
 - `dist/`
-- `server/data/` if you do not want to share your library/database
-- `server/public/audio/` if you do not want to share generated audio
-- `server/public/covers/` if you do not want to share cached covers
-- `server/.env` if it contains personal paths or API keys
+- `server/data/` (removes your personal song library and SQLite DB)
+- `server/public/audio/` (removes generated audio)
+- `server/public/covers/` (removes cached covers)
+- `server/.env` (removes local paths and API keys)
 
-Keep placeholder files such as `.gitkeep` when present so empty folders still
-exist after cloning.
+Keep placeholder files such as `.gitkeep` when present so empty folders still exist after cloning.
 
 ---
 
@@ -344,11 +294,10 @@ scores are useful for comparing takes, not for declaring whether a song is
 | Project / Person | Role |
 | --- | --- |
 | [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) | Local AI music generation engine |
-| [Ambsd](https://x.com/AmbsdOP) / [Original ACE-Step UI](https://github.com/fspecii/ace-step-ui) | Original UI project this fork/customization started from |
-| [Mariano](https://x.com/Mariano_arti) / [APEXFlow repo](https://github.com/FrancoCotter/ace-step-ui) | Local studio customization and workflow direction |
+| [ace-step-ui](https://github.com/fspecii/ace-step-ui) | Spotify-like Web UI for ACE-Step 1.5 by [Ambsd](https://x.com/AmbsdOP) |
 | [AudioMass](https://github.com/pkalogiros/AudioMass) | Browser audio editor |
 | [Demucs](https://github.com/facebookresearch/demucs) | Stem separation |
-| [Pexels](https://www.pexels.com) | Optional stock image/video search |
+| [Pexels](https://www.pexels.com) | Optional stock video backgrounds (for Video Studio) |
 
 ---
 
