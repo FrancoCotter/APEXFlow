@@ -27,7 +27,9 @@
   <img src="https://img.shields.io/badge/TailwindCSS-Local-06B6D4?style=flat-square&logo=tailwindcss" alt="TailwindCSS">
   <img src="https://img.shields.io/badge/SQLite-Local_First-003B57?style=flat-square&logo=sqlite" alt="SQLite">
   <img src="https://img.shields.io/badge/ACE--Step-1.5-8fb68f?style=flat-square" alt="ACE-Step 1.5">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
+  </a>
 </p>
 
 <p align="center">
@@ -242,7 +244,7 @@ Use this option if you prefer to keep the model preloaded in VRAM for rapid cons
      ```batch
      python_embeded\python -m acestep --port 8001 --enable-api --backend pt --server-name 127.0.0.1
      ```
-2. **Start the APEXFlow** (in the `APEXFlow` directory):
+2. **Start APEXFlow** (in the `APEXFlow` directory):
    * *Windows*: run `start.bat`
    * *macOS / Linux*: run `./start.sh`
 
