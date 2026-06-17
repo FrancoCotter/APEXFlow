@@ -77,10 +77,11 @@ This fork transforms the original client into a streamlined, local-first music s
 
 ### 🎙️ Lyrics & Scoring Integration
 * **Score & Synced LRC Sync**: Fully connected backend scoring (quality metrics) and LRC synced lyric generation.
-  * > [!WARNING]
-  * > **Memory Hint**: If your GPU VRAM is limited (e.g., 4GB–8GB), it is **not recommended** to enable both **Score** and **LRC** simultaneously during generation. This saves memory and prevents Python fallback from running out of VRAM.
-  * > [!NOTE]
-  * > **LRC & CoT Alignment**: For high-quality synced lyrics, LRC generation **must be paired with Thinking Mode (CoT)** enabled. Enabling CoT allows the model to correctly reason about and output accurate timeline timestamps matching the vocals.
+   > [!WARNING]  
+   > **Memory Hint**: If your GPU VRAM is limited (e.g., 4GB–8GB), it is **not recommended** to enable both **Score** and **LRC** simultaneously during generation. This saves memory and prevents Python fallback from running out of VRAM.
+   > 
+   > [!NOTE]   
+   > **LRC & CoT Alignment**: For high-quality synced lyrics, LRC generation **must be paired with Thinking Mode (CoT)** enabled. Enabling CoT allows the model to correctly reason about and output accurate timeline timestamps matching the vocals.
 * **Karaoke Mode**: Synced LRC lyrics activate an interactive, Karaoke-style scrolling display in fullscreen playback.
 * **Click-to-Seek**: Click on any scrolling lyric line to jump the player directly to that part of the song.
 
