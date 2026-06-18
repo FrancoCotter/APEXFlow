@@ -8,6 +8,7 @@ import { AlbumCover } from './AlbumCover';
 import { songsApi } from '../services/api';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
+import { hasRenderableSyncedLyrics } from '../utils/syncedLyrics';
 
 interface SongListProps {
     songs: Song[];
@@ -76,7 +77,9 @@ const getExplicitDynamicLyricsFlag = (song: Song): boolean | undefined => {
         record.has_synced_lyrics ??
         params.hasSyncedLyrics ??
         params.has_synced_lyrics ??
-        params.syncedLyrics;
+        params.syncedLyrics ??
+        params.getLrc ??
+        params.get_lrc;
 
     if (typeof explicitSyncedFlag === 'boolean') {
         return explicitSyncedFlag;
@@ -685,13 +688,10 @@ const SongItem: React.FC<SongItemProps> = ({
     const [showDropdown, setShowDropdown] = useState(false);
     const [scoreModalOpen, setScoreModalOpen] = useState(false);
     const [imageError, setImageError] = useState(false);
-    const [isEditingTitle, setIsEditingTitle] = useState(false);
-    const [editedTitle, setEditedTitle] = useState(song.title);
-    const titleInputRef = useRef<HTMLInputElement>(null);
     const itemRef = useRef<HTMLDivElement>(null);
     const hasRequestedWarmupRef = useRef(false);
     const explicitDynamicLyrics = getExplicitDynamicLyricsFlag(song);
-    const [hasVerifiedDynamicLyrics, setHasVerifiedDynamicLyrics] = useState(explicitDynamicLyrics === true);
+    const [hasVerifiedDynamicLyrics, setHasVerifiedDynamicLyrics] = useState(false);
     const scorePayload = getSongScorePayload(song);
     const scoreRequested = hasRequestedScores(song);
     const formattedScorePayload = formatScorePayload(scorePayload);
@@ -702,8 +702,8 @@ const SongItem: React.FC<SongItemProps> = ({
     }, [song.id, song.coverUrl]);
 
     useEffect(() => {
-        if (explicitDynamicLyrics !== undefined) {
-            setHasVerifiedDynamicLyrics(explicitDynamicLyrics);
+        if (explicitDynamicLyrics === false) {
+            setHasVerifiedDynamicLyrics(false);
             return;
         }
 
@@ -722,9 +722,14 @@ const SongItem: React.FC<SongItemProps> = ({
         setHasVerifiedDynamicLyrics(false);
 
         fetch(lyricsUrl, { cache: 'force-cache', signal: controller.signal })
-            .then(response => {
+            .then(async response => {
+                if (!response.ok) return false;
+                const text = await response.text();
+                return hasRenderableSyncedLyrics(text);
+            })
+            .then(hasLyrics => {
                 if (!controller.signal.aborted) {
-                    setHasVerifiedDynamicLyrics(response.ok);
+                    setHasVerifiedDynamicLyrics(hasLyrics);
                 }
             })
             .catch(() => {
@@ -735,13 +740,6 @@ const SongItem: React.FC<SongItemProps> = ({
 
         return () => controller.abort();
     }, [song, explicitDynamicLyrics]);
-
-    useEffect(() => {
-        if (isEditingTitle && titleInputRef.current) {
-            titleInputRef.current.focus();
-            titleInputRef.current.select();
-        }
-    }, [isEditingTitle]);
 
     useEffect(() => {
         if (!onAudioWarmup || !song.audioUrl || song.isGenerating || hasRequestedWarmupRef.current) return;
@@ -762,45 +760,6 @@ const SongItem: React.FC<SongItemProps> = ({
         observer.observe(item);
         return () => observer.disconnect();
     }, [onAudioWarmup, song]);
-
-    const handleSaveTitle = async () => {
-        if (!token || !isOwner || !editedTitle.trim() || editedTitle === song.title) {
-            setIsEditingTitle(false);
-            setEditedTitle(song.title);
-            return;
-        }
-
-        try {
-            const response = await songsApi.updateSong(song.id, { title: editedTitle.trim() }, token);
-            setIsEditingTitle(false);
-            // Update the parent component's song list
-            if (onSongUpdate && response.song) {
-                onSongUpdate({
-                    ...song,
-                    ...response.song,
-                    title: response.song.title ?? editedTitle.trim(),
-                    creator: response.song.creator ?? song.creator,
-                    creator_avatar: response.song.creator_avatar ?? song.creator_avatar,
-                    ditModel: response.song.ditModel ?? response.song.dit_model ?? song.ditModel,
-                    generationParams: response.song.generationParams ?? response.song.generation_params ?? song.generationParams,
-                    tags: response.song.tags ?? song.tags,
-                });
-            }
-        } catch (error) {
-            console.error('Failed to update title:', error);
-            setEditedTitle(song.title);
-            setIsEditingTitle(false);
-        }
-    };
-
-    const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            handleSaveTitle();
-        } else if (e.key === 'Escape') {
-            setEditedTitle(song.title);
-            setIsEditingTitle(false);
-        }
-    };
 
     return (
         <>
@@ -907,30 +866,11 @@ const SongItem: React.FC<SongItemProps> = ({
             {/* Content */}
             <div className="flex-1 min-w-0 flex flex-col justify-center py-1">
                 <div className="flex items-center gap-2">
-                    {isEditingTitle && isOwner ? (
-                        <input
-                            ref={titleInputRef}
-                            type="text"
-                            value={editedTitle}
-                            onChange={(e) => setEditedTitle(e.target.value)}
-                            onBlur={handleSaveTitle}
-                            onKeyDown={handleTitleKeyDown}
-                            onClick={(e) => e.stopPropagation()}
-                            className="font-bold text-lg bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded border border-[#8fb68f] focus:outline-none text-zinc-900 dark:text-white min-w-0 flex-1"
-                        />
-                    ) : (
-                        <h3
-                            className={`min-w-0 font-bold text-lg truncate ${isCurrent ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'} ${isOwner && !song.isGenerating ? 'cursor-pointer hover:underline' : ''}`}
-                            onClick={(e) => {
-                                if (isOwner && !song.isGenerating) {
-                                    e.stopPropagation();
-                                    setIsEditingTitle(true);
-                                }
-                            }}
-                        >
-                            {song.title || (song.isGenerating ? (song.queuePosition ? "Queued..." : "Creating...") : "Untitled")}
-                        </h3>
-                    )}
+                    <h3
+                        className={`min-w-0 font-bold text-lg truncate ${isCurrent ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'}`}
+                    >
+                        {song.title || (song.isGenerating ? (song.queuePosition ? "Queued..." : "Creating...") : "Untitled")}
+                    </h3>
                     <span
                         className="inline-flex shrink-0 items-center justify-center text-[9px] font-bold text-[#16301f] bg-[#8fbc8f] border border-[#a7cda6] px-1.5 py-0.5 rounded-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
                         title={`DiT model: ${getSongModelId(song) || 'unknown'}`}

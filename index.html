@@ -4,10 +4,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>APEXFlow - Local UI for ACE-Step 1.5</title>
+    <title>APEXFlow - Local AI Music Generator for ACE-Step 1.5</title>
     <!-- Primary Meta Tags -->
-    <meta name="title" content="APEXFlow - Local UI for ACE-Step 1.5" />
-    <meta name="description" content="Create AI music locally with APEXFlow, an unofficial local UI for ACE-Step 1.5." />
+    <meta name="title" content="APEXFlow - Local AI Music Generator for ACE-Step 1.5" />
+    <meta name="description" content="Create AI music locally with APEXFlow. Free and open source music generation powered by ACE-Step 1.5." />
     <meta name="keywords" content="AI music generator, ACE-Step, local AI, music generation, text to music, AI song generator" />
     <meta name="robots" content="index, follow" />
     <meta name="author" content="APEXFlow" />
@@ -19,14 +19,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
       :root {
         --breakpoint-mobile: 768px;
       }
 
       body {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC',
+          'Noto Sans JP', 'Noto Sans KR', sans-serif;
       }
 
       ::-webkit-scrollbar {
@@ -60,13 +62,7 @@
       .scrollbar-hide::-webkit-scrollbar {
         display: none;
       }
-
-      .gradient-text {
-        background: linear-gradient(to right, #f472b6, #a78bfa, #60a5fa);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-
+      
       @keyframes music-bars {
         0% { height: 20%; opacity: 0.5; }
         50% { height: 100%; opacity: 1; }

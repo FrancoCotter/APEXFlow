@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Song } from '../types';
-import { Heart, Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers } from 'lucide-react';
+import { Play, Pause, MoreHorizontal, X, Copy, Wand2, MoreVertical, Download, Repeat, Video, Music, Link as LinkIcon, Sparkles, Globe, Lock, Trash2, Edit3, Layers, SlidersHorizontal } from 'lucide-react';
 import { songsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -8,6 +8,7 @@ import { SongDropdownMenu } from './SongDropdownMenu';
 import { AlbumCover } from './AlbumCover';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
+import { hasRenderableSyncedLyrics } from '../utils/syncedLyrics';
 
 interface RightSidebarProps {
     song: Song | null;
@@ -40,12 +41,57 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const [titleError, setTitleError] = useState<string | null>(null);
     const [isSavingTitle, setIsSavingTitle] = useState(false);
     const [now, setNow] = useState(() => Date.now());
+    const [hasVerifiedDynamicLyrics, setHasVerifiedDynamicLyrics] = useState(false);
     const displayViewCount = song
         ? song.viewCount ?? (song as Song & { view_count?: number }).view_count ?? 0
         : 0;
     const songCaption = song ? getSongCaption(song) : '';
     const displayTags = song ? getSongTags(song) : [];
     const canExpandCaption = songCaption.length > 140;
+    const generationParams = ((song?.generationParams ?? {}) as Record<string, any>);
+    const generationModel = song?.ditModel || generationParams.ditModel || generationParams.dit_model;
+    const generationDuration = generationParams.duration;
+    const generationBpm = generationParams.bpm;
+    const generationKeyScale = generationParams.keyScale || generationParams.key_scale;
+    const generationTimeSignature = generationParams.timeSignature || generationParams.time_signature;
+    const generationTaskType = generationParams.taskType || generationParams.task_type || 'text2music';
+    const generationHasReference = Boolean(generationParams.referenceAudioUrl || generationParams.reference_audio_url);
+    const generationHasSource = Boolean(generationParams.sourceAudioUrl || generationParams.source_audio_url);
+    const generationHasSyncedLyrics = Boolean(
+        generationParams.getLrc
+        ?? generationParams.get_lrc
+        ?? generationParams.hasSyncedLyrics
+        ?? generationParams.has_synced_lyrics
+    );
+    const generationThinking = Boolean(generationParams.thinking);
+    const generationInstrumental =
+        typeof generationParams.instrumental === 'boolean'
+            ? generationParams.instrumental
+            : !(song?.lyrics || '').trim();
+    const generationMode =
+        generationHasSource
+            ? 'Cover'
+            : generationTaskType === 'repaint'
+                ? 'Repaint'
+                : generationHasReference
+                    ? 'Reference'
+                    : generationTaskType === 'text2music'
+                        ? 'T2M'
+                        : generationTaskType;
+
+    const generationFacts = song ? [
+        generationModel ? { label: 'Model', value: generationModel } : null,
+        { label: 'Mode', value: generationMode },
+        generationInstrumental ? { label: 'Vocals', value: 'Instrumental' } : { label: 'Vocals', value: 'Vocal' },
+        generationThinking ? { label: 'Think', value: 'On' } : null,
+        hasVerifiedDynamicLyrics ? { label: 'Lyrics', value: 'Synced LRC' } : null,
+        typeof generationDuration === 'number' && generationDuration > 0 ? { label: 'Duration', value: `${generationDuration}s` } : null,
+        typeof generationBpm === 'number' && generationBpm > 0 ? { label: 'BPM', value: String(generationBpm) } : null,
+        typeof generationKeyScale === 'string' && generationKeyScale ? { label: 'Key', value: generationKeyScale } : null,
+        typeof generationTimeSignature === 'string' && generationTimeSignature ? { label: 'Signature', value: generationTimeSignature } : null,
+        typeof generationParams.vaeModel === 'string' && generationParams.vaeModel ? { label: 'VAE', value: generationParams.vaeModel } : null,
+        typeof generationParams.dcwEnabled === 'boolean' ? { label: 'DCW', value: generationParams.dcwEnabled ? 'On' : 'Off' } : null,
+    ].filter(Boolean) as Array<{ label: string; value: string }> : [];
 
     useEffect(() => {
         if (song) {
@@ -70,6 +116,36 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
         const interval = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(interval);
     }, [song?.id, song?.isGenerating]);
+
+    useEffect(() => {
+        if (!song?.audioUrl || !generationHasSyncedLyrics) {
+            setHasVerifiedDynamicLyrics(false);
+            return;
+        }
+
+        const lrcUrl = song.audioUrl.replace(/\.[^/.]+$/, '.lrc');
+        const controller = new AbortController();
+        setHasVerifiedDynamicLyrics(false);
+
+        fetch(lrcUrl, { cache: 'force-cache', signal: controller.signal })
+            .then(async response => {
+                if (!response.ok) return false;
+                const text = await response.text();
+                return hasRenderableSyncedLyrics(text);
+            })
+            .then(hasLyrics => {
+                if (!controller.signal.aborted) {
+                    setHasVerifiedDynamicLyrics(hasLyrics);
+                }
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    setHasVerifiedDynamicLyrics(false);
+                }
+            });
+
+        return () => controller.abort();
+    }, [song?.audioUrl, generationHasSyncedLyrics]);
 
     const formatElapsedTime = (start: Date): string => {
         const startMs = start.getTime();
@@ -285,11 +361,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             </button>
                         </div>
 
-                        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-white">
-                                <Play size={16} fill="currentColor" />
-                                <span className="text-xs font-bold font-mono">{displayViewCount}</span>
-                            </div>
+                        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-end">
                             <span className="text-[10px] font-bold text-black bg-white/90 px-1.5 py-0.5 rounded backdrop-blur-sm">
                                 {song.duration}
                             </span>
@@ -391,7 +463,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 >
                                     {song.creator || t('anonymous')}
                                 </span>
-                                <p className="text-xs text-zinc-500">{t('created')} {new Date(song.createdAt).toLocaleDateString()}</p>
+                                <p className="text-xs text-zinc-500">
+                                    {t('created')} {new Date(song.createdAt).toLocaleDateString()}
+                                    <span className="mx-1.5 text-zinc-400">·</span>
+                                    <span>{displayViewCount} plays</span>
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -414,7 +490,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             title={t('openInEditor')}
                             className="p-3 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-300/50 dark:hover:bg-white/10 rounded-xl transition-all duration-200"
                         >
-                            <Edit3 size={18} strokeWidth={1.5} />
+                            <SlidersHorizontal size={18} strokeWidth={1.5} />
                         </button>
                         <button
                             onClick={() => onReuse && onReuse(song)}
@@ -424,57 +500,53 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             <Repeat size={18} strokeWidth={1.5} />
                         </button>
                         <button
-                            onClick={() => {
-                                if (!song?.audioUrl) return;
-                                const baseUrl = window.location.port === '3000'
-                                    ? `${window.location.protocol}//${window.location.hostname}:3001`
-                                    : window.location.origin;
-                                const audioUrl = song.audioUrl.startsWith('http') ? song.audioUrl : `${baseUrl}${song.audioUrl}`;
-                                window.open(`${baseUrl}/demucs-web/?audioUrl=${encodeURIComponent(audioUrl)}`, '_blank');
+                            title={t('downloadAudio')}
+                            onClick={async () => {
+                                if (!song.audioUrl) return;
+                                try {
+                                    const response = await fetch(song.audioUrl);
+                                    const blob = await response.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = `${song.title || 'song'}.mp3`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    URL.revokeObjectURL(url);
+                                } catch (error) {
+                                    console.error('Download failed:', error);
+                                }
                             }}
-                            title={t('extractStems')}
                             className="p-3 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white hover:bg-zinc-300/50 dark:hover:bg-white/10 rounded-xl transition-all duration-200"
                         >
-                            <Layers size={18} strokeWidth={1.5} />
+                            <Download size={18} strokeWidth={1.5} />
                         </button>
                     </div>
 
-                    {/* Icon Actions Row */}
-                    <div className="flex items-center justify-between px-2 py-2">
-                        <div className="flex items-center gap-6">
-                            <ActionButton
-                                icon={<Heart size={22} fill={isLiked ? 'currentColor' : 'none'} />}
-                                label={String(song.likeCount || 0)}
-                                active={isLiked}
-                                onClick={() => onToggleLike?.(song.id)}
-                            />
+                    {generationFacts.length > 0 && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
+                                <Sparkles size={14} />
+                                Generation
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {generationFacts.map((fact) => (
+                                    <div
+                                        key={`${fact.label}-${fact.value}`}
+                                        className="rounded-lg border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-2.5 py-2 min-w-[96px]"
+                                    >
+                                        <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                            {fact.label}
+                                        </div>
+                                        <div className="mt-1 text-sm font-semibold text-zinc-900 dark:text-white break-words">
+                                            {fact.value}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                                title={t('downloadAudio')}
-                                onClick={async () => {
-                                    if (!song.audioUrl) return;
-                                    try {
-                                        const response = await fetch(song.audioUrl);
-                                        const blob = await response.blob();
-                                        const url = URL.createObjectURL(blob);
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.download = `${song.title || 'song'}.mp3`;
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                        URL.revokeObjectURL(url);
-                                    } catch (error) {
-                                        console.error('Download failed:', error);
-                                    }
-                                }}
-                            >
-                                <Download size={20} />
-                            </button>
-                        </div>
-                    </div>
+                    )}
 
                     {(song.generationParams?.referenceAudioUrl || song.generationParams?.sourceAudioUrl) && (
                         <div className="space-y-3">
@@ -603,7 +675,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 )}
                             </div>
                         )}
-                        {displayTags.length > 0 && (
+                        {!songCaption && displayTags.length > 0 && (
                             <div className="space-y-1.5">
                                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Tags</h3>
                                 <div className="flex flex-wrap gap-1.5">

@@ -25,7 +25,20 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: [
+          'Manrope',
+          'Inter',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'PingFang SC',
+          'Hiragino Sans GB',
+          'Microsoft YaHei',
+          'Noto Sans CJK SC',
+          'Noto Sans JP',
+          'Noto Sans KR',
+          'sans-serif',
+        ],
       },
       animation: {
         'gradient-x': 'gradient-x 15s ease infinite',

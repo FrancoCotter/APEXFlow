@@ -658,12 +658,117 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   // Reuse Effect - must be after all state declarations
   useEffect(() => {
     if (initialData) {
+      const params = (initialData.song.generationParams || {}) as Record<string, any>;
+      const reusedModel = initialData.song.ditModel || params.ditModel || params.dit_model;
+      const reusedTaskType = params.taskType || params.task_type;
+      const nextLyrics = normalizeLyricsInput(initialData.song.lyrics);
+      const nextStyle = initialData.song.style || params.style || params.caption || '';
+      const reusedInstrumental =
+        typeof params.instrumental === 'boolean'
+          ? params.instrumental
+          : initialData.song.lyrics.length === 0;
+
       setCustomMode(true);
-      setLyrics(normalizeLyricsInput(initialData.song.lyrics));
-      setStyle(initialData.song.style);
+      setLyrics(nextLyrics);
+      setStyle(nextStyle);
       setTitle(initialData.song.title);
-      setInstrumental(initialData.song.lyrics.length === 0);
-      setCustomExampleSnapshot(null);
+      setInstrumental(reusedInstrumental);
+      setThinking(Boolean(params.thinking));
+      setGetLrc(Boolean(params.getLrc ?? params.get_lrc));
+      setEnhance(Boolean(params.enhance));
+
+      if (typeof params.duration === 'number') setDuration(params.duration);
+      if (typeof params.bpm === 'number') setBpm(params.bpm);
+      if (typeof params.keyScale === 'string') setKeyScale(params.keyScale);
+      else if (typeof params.key_scale === 'string') setKeyScale(params.key_scale);
+      if (typeof params.timeSignature === 'string') setTimeSignature(params.timeSignature);
+      else if (typeof params.time_signature === 'string') setTimeSignature(params.time_signature);
+
+      if (typeof params.guidanceScale === 'number') setGuidanceScale(params.guidanceScale);
+      else if (typeof params.guidance_scale === 'number') setGuidanceScale(params.guidance_scale);
+      if (typeof params.inferenceSteps === 'number') setInferenceSteps(params.inferenceSteps);
+      else if (typeof params.inference_steps === 'number') setInferenceSteps(params.inference_steps);
+      if (typeof params.useAdg === 'boolean') setUseAdg(params.useAdg);
+      else if (typeof params.use_adg === 'boolean') setUseAdg(params.use_adg);
+      if (typeof params.dcwEnabled === 'boolean') setDcwEnabled(params.dcwEnabled);
+      else if (typeof params.dcw_enabled === 'boolean') setDcwEnabled(params.dcw_enabled);
+
+      if (typeof params.audioFormat === 'string' && (params.audioFormat === 'mp3' || params.audioFormat === 'flac')) {
+        setAudioFormat(params.audioFormat);
+      } else if (typeof params.audio_format === 'string' && (params.audio_format === 'mp3' || params.audio_format === 'flac')) {
+        setAudioFormat(params.audio_format);
+      }
+
+      if (typeof params.inferMethod === 'string' && (params.inferMethod === 'ode' || params.inferMethod === 'sde')) {
+        setInferMethod(params.inferMethod);
+      } else if (typeof params.infer_method === 'string' && (params.infer_method === 'ode' || params.infer_method === 'sde')) {
+        setInferMethod(params.infer_method);
+      }
+
+      setReferenceAudioUrl(
+        typeof params.referenceAudioUrl === 'string'
+          ? params.referenceAudioUrl
+          : typeof params.reference_audio_url === 'string'
+            ? params.reference_audio_url
+            : ''
+      );
+      setSourceAudioUrl(
+        typeof params.sourceAudioUrl === 'string'
+          ? params.sourceAudioUrl
+          : typeof params.source_audio_url === 'string'
+            ? params.source_audio_url
+            : ''
+      );
+      setReferenceAudioTitle(
+        typeof params.referenceAudioTitle === 'string'
+          ? params.referenceAudioTitle
+          : typeof params.reference_audio_title === 'string'
+            ? params.reference_audio_title
+            : ''
+      );
+      setSourceAudioTitle(
+        typeof params.sourceAudioTitle === 'string'
+          ? params.sourceAudioTitle
+          : typeof params.source_audio_title === 'string'
+            ? params.source_audio_title
+            : ''
+      );
+      setAudioCoverStrength(
+        typeof params.audioCoverStrength === 'number'
+          ? params.audioCoverStrength
+          : typeof params.audio_cover_strength === 'number'
+            ? params.audio_cover_strength
+            : 1.0
+      );
+
+      setTaskType(typeof reusedTaskType === 'string' ? reusedTaskType : 'text2music');
+      if (typeof reusedModel === 'string' && reusedModel.length > 0) {
+        setSelectedModel(reusedModel);
+        localStorage.setItem('ace-model', reusedModel);
+      }
+      if (typeof params.vaeModel === 'string') {
+        setSelectedVae(params.vaeModel);
+        localStorage.setItem('ace-vae', params.vaeModel);
+      } else if (typeof params.vae_model === 'string') {
+        setSelectedVae(params.vae_model);
+        localStorage.setItem('ace-vae', params.vae_model);
+      }
+
+      setShowAdvanced(
+        Boolean(
+          reusedTaskType && reusedTaskType !== 'text2music'
+          || params.referenceAudioUrl
+          || params.reference_audio_url
+          || params.sourceAudioUrl
+          || params.source_audio_url
+          || params.bpm
+          || params.keyScale
+          || params.key_scale
+          || params.timeSignature
+          || params.time_signature
+        )
+      );
+      setCustomExampleSnapshot({ lyrics: nextLyrics, style: nextStyle });
     }
   }, [initialData]);
 
@@ -960,6 +1065,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     setKeyScale('');
     setTimeSignature('');
     setThinking(false);
+    setGetLrc(false);
     setCustomExampleSnapshot(null);
   };
 
@@ -1751,7 +1857,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   max="4"
                   step="1"
                   value={batchSize}
-                  onChange={(e) => setBatchSize(Number(e.target.value))}
+                  onChange={setBatchSize}
                   className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#8fb68f]"
                 />
                 <p className="text-[10px] text-zinc-500">{t('numberOfVariations')}</p>
