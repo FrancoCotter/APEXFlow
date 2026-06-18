@@ -27,6 +27,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
     const [publicPlaylists, setPublicPlaylists] = useState<Playlist[]>([]);
     const [loading, setLoading] = useState(!initialUser);
     const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+    const [heroPalette, setHeroPalette] = useState({ base: '#0b0d0b', accent: '#1f261f' });
     const [infoPalette, setInfoPalette] = useState({ base: '#1f261f', accent: '#4d5a43' });
     const [profileAssetVersion, setProfileAssetVersion] = useState(0);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -130,9 +131,12 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
         });
     };
 
-    const handleInfoImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const extractPaletteFromImage = (
+        image: HTMLImageElement,
+        fallback: { base: string; accent: string },
+        scale: { base: number; accent: number; lift?: number }
+    ) => {
         try {
-            const image = event.currentTarget;
             const canvas = document.createElement('canvas');
             const size = 32;
             canvas.width = size;
@@ -160,11 +164,34 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
             r = Math.round(r / count);
             g = Math.round(g / count);
             b = Math.round(b / count);
-            const base = `rgb(${Math.round(r * 0.28)}, ${Math.round(g * 0.28)}, ${Math.round(b * 0.28)})`;
-            const accent = `rgb(${Math.min(255, Math.round(r * 0.72 + 22))}, ${Math.min(255, Math.round(g * 0.72 + 22))}, ${Math.min(255, Math.round(b * 0.72 + 22))})`;
-            setInfoPalette({ base, accent });
+            const lift = scale.lift || 0;
+            const base = `rgb(${Math.round(r * scale.base)}, ${Math.round(g * scale.base)}, ${Math.round(b * scale.base)})`;
+            const accent = `rgb(${Math.min(255, Math.round(r * scale.accent + lift))}, ${Math.min(255, Math.round(g * scale.accent + lift))}, ${Math.min(255, Math.round(b * scale.accent + lift))})`;
+            return { base, accent };
         } catch {
-            setInfoPalette({ base: '#1f261f', accent: '#4d5a43' });
+            return fallback;
+        }
+    };
+
+    const handleHeroImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+        const palette = extractPaletteFromImage(
+            event.currentTarget,
+            { base: '#0b0d0b', accent: '#1f261f' },
+            { base: 0.42, accent: 0.68, lift: 12 }
+        );
+        if (palette) {
+            setHeroPalette(palette);
+        }
+    };
+
+    const handleInfoImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+        const palette = extractPaletteFromImage(
+            event.currentTarget,
+            { base: '#1f261f', accent: '#4d5a43' },
+            { base: 0.28, accent: 0.72, lift: 22 }
+        );
+        if (palette) {
+            setInfoPalette(palette);
         }
     };
 
@@ -546,11 +573,26 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
         <div
             ref={scrollContainerRef}
             onScroll={handleProfileScroll}
-            className={`w-full h-full flex flex-col bg-zinc-50 dark:bg-black overflow-y-auto pb-24 lg:pb-32 relative transition-opacity duration-200 ${loading ? 'opacity-100' : 'opacity-100'}`}
+            className={`w-full h-full flex flex-col overflow-y-auto pb-24 lg:pb-32 relative transition-[opacity,background-color] duration-300 ${loading ? 'opacity-100' : 'opacity-100'}`}
+            style={{ backgroundColor: heroPalette.base }}
         >
+            <img
+                src={heroCoverUrl}
+                alt=""
+                aria-hidden="true"
+                className="hidden"
+                referrerPolicy="no-referrer"
+                onLoad={handleHeroImageLoad}
+            />
             {/* Artist Hero */}
-            <div className="relative min-h-[960px] overflow-hidden bg-[#0b0d0b] group/banner">
-                <div className="absolute inset-0 bg-[#0b0d0b]" />
+            <div
+                className="relative min-h-[960px] overflow-hidden group/banner transition-[background-color] duration-300"
+                style={{ backgroundColor: heroPalette.base }}
+            >
+                <div
+                    className="absolute inset-0 transition-[background-color] duration-300"
+                    style={{ backgroundColor: heroPalette.base }}
+                />
                 <div
                     ref={heroBlurLayerRef}
                     className="absolute inset-0 bg-cover bg-center transition-[opacity,filter,transform] duration-200 will-change-[opacity,filter,transform]"
@@ -562,8 +604,12 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                     style={{ ...heroStyle, opacity: 0.58, filter: 'blur(0px)', transform: 'scale(1.02)' }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-black/5" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
-                <div className="absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-black/55 to-transparent" />
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background: `linear-gradient(to top, ${heroPalette.base} 0%, rgba(0,0,0,0.28) 38%, rgba(0,0,0,0) 100%)`,
+                    }}
+                />
 
                 <button
                     onClick={onBack}
@@ -663,7 +709,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                 </div>
             </div>
             {/* Content */}
-            <div className="max-w-7xl mx-auto w-full px-4 md:px-8 py-6 md:py-8 space-y-8 md:space-y-12">
+            <div className="relative z-10 -mt-16 md:-mt-20">
+                <div className="max-w-7xl mx-auto w-full px-4 pt-12 md:px-8 md:pt-16 pb-6 md:pb-8 space-y-8 md:space-y-12">
                 {/* Songs Section */}
                 <section ref={songsSectionRef}>
                     <div className="flex items-center justify-between mb-4 md:mb-6">
@@ -683,7 +730,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                 return (
                                     <div
                                         key={song.id}
-                                        className={`group flex items-center gap-3 md:gap-4 p-2 md:p-3 rounded-lg transition-colors ${isCurrentSong ? 'bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'hover:bg-zinc-100 dark:hover:bg-zinc-900'}`}
+                                        className={`group flex items-center gap-3 md:gap-4 p-2 md:p-3 rounded-lg transition-colors ${isCurrentSong ? 'bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'hover:bg-white/10'}`}
                                     >
                                         <div className="w-14 h-14 md:w-16 md:h-16 flex-shrink-0">
                                             {renderCoverControl(song, displaySongs, 'w-full h-full object-cover', 22)}
@@ -743,6 +790,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                         </div>
                     </section>
                 )}
+                </div>
             </div>
 
             {/* Profile Info Modal */}

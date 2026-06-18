@@ -176,8 +176,8 @@ const updateMetaTags = (song: Song) => {
 };
 
 const resetMetaTags = () => {
-    document.title = 'APEXFlow - Local UI for ACE-Step 1.5';
-    const defaultDescription = 'Create original music locally with APEXFlow, an unofficial UI for ACE-Step 1.5.';
+    document.title = 'APEXFlow - Local AI Music Generator';
+    const defaultDescription = 'Create original music with AI locally. Generate songs in any style with custom lyrics and professional quality using APEXFlow.';
     const defaultImage = '/og-image.png';
 
     const updateMeta = (selector: string, content: string) => {
@@ -186,11 +186,11 @@ const resetMetaTags = () => {
     };
 
     updateMeta('meta[name="description"]', defaultDescription);
-    updateMeta('meta[property="og:title"]', 'APEXFlow - Local UI for ACE-Step 1.5');
+    updateMeta('meta[property="og:title"]', 'APEXFlow - Local AI Music Generator for ACE-Step 1.5');
     updateMeta('meta[property="og:description"]', defaultDescription);
     updateMeta('meta[property="og:image"]', defaultImage);
     updateMeta('meta[property="og:type"]', 'website');
-    updateMeta('meta[name="twitter:title"]', 'APEXFlow - Local UI for ACE-Step 1.5');
+    updateMeta('meta[name="twitter:title"]', 'APEXFlow - Local AI Music Generator for ACE-Step 1.5');
     updateMeta('meta[name="twitter:description"]', defaultDescription);
     updateMeta('meta[name="twitter:image"]', defaultImage);
 };
@@ -422,59 +422,25 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
                             {/* Cover Art */}
                             <div className="relative aspect-square max-w-xs md:max-w-sm mx-auto lg:mx-0 rounded-xl overflow-hidden shadow-2xl">
                                 <img src={song.coverUrl} alt={song.title} className="w-full h-full object-cover" />
-                                {isCurrentlyPlaying && (
-                                    <div className="absolute bottom-4 left-4 flex items-center gap-1">
-                                        <span className="w-1.5 h-4 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
-                                        <span className="w-1.5 h-6 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                                        <span className="w-1.5 h-3 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
-                                        <span className="w-1.5 h-7 bg-[#8fb68f] rounded-full animate-pulse" style={{ animationDelay: '450ms' }} />
-                                    </div>
-                                )}
                             </div>
-
-                            {hasRenderableLyrics && (
-                                <div className="flex justify-center lg:justify-start">
-                                    <button
-                                        onClick={() => setLyricsPanelRequested(prev => !prev)}
-                                        className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${
-                                            showLyricsPanel
-                                                ? 'bg-white text-black dark:bg-white dark:text-black'
-                                                : 'bg-zinc-200 dark:bg-zinc-900 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white'
-                                        }`}
-                                        title="Show lyrics"
-                                        aria-label="Show lyrics"
-                                    >
-                                        <Quote size={16} />
-                                        <span className="hidden sm:inline">Lyrics</span>
-                                    </button>
-                                </div>
-                            )}
-
                             {/* Action Buttons */}
                             <div className="flex items-center justify-center lg:justify-start gap-2 md:gap-3 flex-wrap">
-                                <div className="flex items-center gap-2 bg-zinc-200 dark:bg-zinc-900 px-3 py-2 rounded-full text-sm">
-                                    <Eye size={16} className="text-zinc-600 dark:text-white" />
-                                    <span className="text-zinc-900 dark:text-white font-semibold">{song.viewCount || 0}</span>
-                                </div>
-                                <button
-                                    onClick={() => onToggleLike?.(song.id)}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-colors ${isLiked ? 'bg-[#8fb68f] text-[#132018]' : 'bg-zinc-200 dark:bg-zinc-900 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white'}`}
-                                >
-                                    <Heart size={16} className={isLiked ? 'fill-current' : ''} />
-                                    <span className="font-semibold">{song.likeCount || 0}</span>
-                                </button>
-                                {user?.id === song.userId && (
-                                    <button
-                                        onClick={() => {
-                                            if (!song.audioUrl) return;
-                                            const audioUrl = song.audioUrl.startsWith('http') ? song.audioUrl : `${window.location.origin}${song.audioUrl}`;
-                                            window.open(`/editor?audioUrl=${encodeURIComponent(audioUrl)}`, '_blank');
-                                        }}
-                                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded-full text-sm font-semibold transition-colors text-white"
-                                    >
-                                        <Edit3 size={16} />
-                                        <span className="hidden md:inline">Edit</span>
-                                    </button>
+                                {hasRenderableLyrics && (
+                                    <div className="flex justify-center lg:justify-start">
+                                        <button
+                                            onClick={() => setLyricsPanelRequested(prev => !prev)}
+                                            className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-semibold transition-colors ${
+                                                showLyricsPanel
+                                                    ? 'bg-white text-black dark:bg-white dark:text-black'
+                                                    : 'bg-zinc-200 dark:bg-zinc-900 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white'
+                                            }`}
+                                            title="Show lyrics"
+                                            aria-label="Show lyrics"
+                                        >
+                                            <Quote size={16} />
+                                            <span className="hidden sm:inline">Lyrics</span>
+                                        </button>
+                                    </div>
                                 )}
                                 <div className="relative">
                                     <button
