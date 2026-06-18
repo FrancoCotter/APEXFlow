@@ -81,6 +81,76 @@ html.theme-switching *::after {
   overflow: hidden;
 }
 
+.create-panel-slider,
+.create-panel-slider-thin {
+  --slider-track-bg: rgba(82, 82, 91, 0.9);
+  --slider-fill: #8fb68f;
+  --slider-thumb-size: 1rem;
+  --slider-track-size: 0.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.create-panel-slider-thin {
+  --slider-thumb-size: 0.95rem;
+  --slider-track-size: 0.375rem;
+}
+
+.create-panel-slider:focus,
+.create-panel-slider-thin:focus {
+  outline: none;
+}
+
+.create-panel-slider::-webkit-slider-runnable-track,
+.create-panel-slider-thin::-webkit-slider-runnable-track {
+  height: var(--slider-track-size);
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--slider-fill) 0%,
+    var(--slider-fill) var(--slider-percent, 0%),
+    var(--slider-track-bg) var(--slider-percent, 0%),
+    var(--slider-track-bg) 100%
+  );
+}
+
+.create-panel-slider::-webkit-slider-thumb,
+.create-panel-slider-thin::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 9999px;
+  background: #8fb68f;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  margin-top: calc((var(--slider-track-size) - var(--slider-thumb-size)) / 2);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
+}
+
+.create-panel-slider::-moz-range-track,
+.create-panel-slider-thin::-moz-range-track {
+  height: var(--slider-track-size);
+  border-radius: 9999px;
+  background: var(--slider-track-bg);
+}
+
+.create-panel-slider::-moz-range-progress,
+.create-panel-slider-thin::-moz-range-progress {
+  height: var(--slider-track-size);
+  border-radius: 9999px;
+  background: var(--slider-fill);
+}
+
+.create-panel-slider::-moz-range-thumb,
+.create-panel-slider-thin::-moz-range-thumb {
+  width: var(--slider-thumb-size);
+  height: var(--slider-thumb-size);
+  border-radius: 9999px;
+  background: #8fb68f;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .now-playing-slide-next,
   .now-playing-slide-previous,

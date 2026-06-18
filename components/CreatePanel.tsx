@@ -179,7 +179,7 @@ type CustomExampleSnapshot = {
 };
 
 const selectClassName = "w-full bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-white/10 rounded-xl px-2 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-[#8fb68f] dark:focus:border-[#8fb68f] transition-colors cursor-pointer [&>option]:bg-white [&>option]:dark:bg-zinc-800 [&>option]:text-zinc-900 [&>option]:dark:text-white disabled:opacity-60 disabled:cursor-not-allowed";
-const checkboxClassName = "h-4 w-4 rounded border-zinc-300 dark:border-white/20 bg-white dark:bg-black/20 text-[#8fb68f] accent-[#8fb68f] focus:ring-2 focus:ring-[#8fb68f]/35 focus:ring-offset-0 cursor-pointer";
+const checkboxClassName = "h-4 w-4 shrink-0 self-start mt-0.5 rounded border-zinc-300 dark:border-white/20 bg-white dark:bg-black/20 text-[#8fb68f] accent-[#8fb68f] focus:ring-2 focus:ring-[#8fb68f]/35 focus:ring-offset-0 cursor-pointer";
 
 let createPanelDraftMemory: CreatePanelDraft = {};
 
@@ -1858,7 +1858,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   step="1"
                   value={batchSize}
                   onChange={setBatchSize}
-                  className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#8fb68f]"
+                  className="create-panel-slider w-full h-2 cursor-pointer"
+                  style={{ ['--slider-percent' as string]: `${((batchSize - 1) / 3) * 100}%` }}
                 />
                 <p className="text-[10px] text-zinc-500">{t('numberOfVariations')}</p>
               </div>
@@ -2608,7 +2609,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                       step="0.01"
                       value={dcwScaler}
                       onChange={(e) => setDcwScaler(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#8fb68f]"
+                      className="create-panel-slider-thin w-full h-1 cursor-pointer"
+                      style={{ ['--slider-percent' as string]: `${dcwScaler * 100}%` }}
                     />
                   </div>
                   <div className="space-y-1">
@@ -2628,7 +2630,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                       step="0.01"
                       value={dcwHighScaler}
                       onChange={(e) => setDcwHighScaler(parseFloat(e.target.value))}
-                      className="w-full h-1 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#8fb68f]"
+                      className="create-panel-slider-thin w-full h-1 cursor-pointer"
+                      style={{ ['--slider-percent' as string]: `${dcwHighScaler * 100}%` }}
                     />
                   </div>
                 </div>
@@ -3047,45 +3050,45 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <label
-                className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400"
+                className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400"
                 title="Adaptive Dual Guidance: dynamically adjusts CFG for quality. Base model only; slower."
               >
                 <input type="checkbox" checked={useAdg} onChange={() => setUseAdg(!useAdg)} className={checkboxClassName} />
                 {t('useAdg')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Allow the LM to run in larger batches for speed (more VRAM).">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Allow the LM to run in larger batches for speed (more VRAM).">
                 <input type="checkbox" checked={allowLmBatch} onChange={() => setAllowLmBatch(!allowLmBatch)} className={checkboxClassName} />
                 {t('allowLmBatch')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about metadata like BPM, key, duration.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about metadata like BPM, key, duration.">
                 <input type="checkbox" checked={useCotMetas} onChange={() => setUseCotMetas(!useCotMetas)} className={checkboxClassName} />
                 {t('useCotMetas')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about the caption/style text.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about the caption/style text.">
                 <input type="checkbox" checked={useCotCaption} onChange={() => setUseCotCaption(!useCotCaption)} className={checkboxClassName} />
                 {t('useCotCaption')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about language selection.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about language selection.">
                 <input type="checkbox" checked={useCotLanguage} onChange={() => setUseCotLanguage(!useCotLanguage)} className={checkboxClassName} />
                 {t('useCotLanguage')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Auto-generate missing fields when possible.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Auto-generate missing fields when possible.">
                 <input type="checkbox" checked={autogen} onChange={() => setAutogen(!autogen)} className={checkboxClassName} />
                 {t('autogen')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Include debug info for constrained decoding.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Include debug info for constrained decoding.">
                 <input type="checkbox" checked={constrainedDecodingDebug} onChange={() => setConstrainedDecodingDebug(!constrainedDecodingDebug)} className={checkboxClassName} />
                 {t('constrainedDecodingDebug')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Use the formatted caption produced by the AI formatter.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Use the formatted caption produced by the AI formatter.">
                 <input type="checkbox" checked={isFormatCaption} onChange={() => setIsFormatCaption(!isFormatCaption)} className={checkboxClassName} />
                 {t('formatCaption')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Return scorer outputs for diagnostics.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Return scorer outputs for diagnostics.">
                 <input type="checkbox" checked={getScores} onChange={() => setGetScores(!getScores)} className={checkboxClassName} />
                 {t('getScores')}
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Return synced lyric (LRC) output when available.">
+              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Return synced lyric (LRC) output when available.">
                 <input type="checkbox" checked={getLrc} onChange={() => setGetLrc(!getLrc)} className={checkboxClassName} />
                 {t('getLrcLyrics')}
               </label>

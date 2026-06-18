@@ -27,6 +27,7 @@ export const EditableSlider: React.FC<EditableSliderProps> = ({
 }) => {
   const [inputValue, setInputValue] = useState(value.toString());
   const [isEditing, setIsEditing] = useState(false);
+  const sliderPercent = max === min ? 0 : ((value - min) / (max - min)) * 100;
 
   useEffect(() => {
     if (!isEditing) {
@@ -95,7 +96,8 @@ export const EditableSlider: React.FC<EditableSliderProps> = ({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[#8fb68f]"
+        className="create-panel-slider w-full h-2 cursor-pointer"
+        style={{ ['--slider-percent' as string]: `${sliderPercent}%` }}
       />
       {helpText && (
         <p className="text-[10px] text-zinc-500">{helpText}</p>
