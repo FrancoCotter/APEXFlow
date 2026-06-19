@@ -348,15 +348,6 @@ export const SongList: React.FC<SongListProps> = ({
         });
     }, [songs, searchQuery, activeFilters, likedSongIds]);
 
-    const filteredUploads = useMemo(() => {
-        if (activeFilters.size > 0) return [];
-        if (!referenceTracks.length) return [];
-        return referenceTracks.filter(track => {
-            const title = track.filename.replace(/\.[^/.]+$/, '');
-            return title.toLowerCase().includes(searchQuery.toLowerCase());
-        });
-    }, [referenceTracks, searchQuery, activeFilters]);
-
     const listItems = useMemo(() => {
         const songItems = filteredSongs.map(song => ({
             type: 'song' as const,
@@ -364,14 +355,8 @@ export const SongList: React.FC<SongListProps> = ({
             createdAt: song.createdAt,
             song
         }));
-        const uploadItems = filteredUploads.map(track => ({
-            type: 'upload' as const,
-            id: track.id,
-            createdAt: new Date(track.created_at || Date.now()),
-            track
-        }));
-        return [...songItems, ...uploadItems].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    }, [filteredSongs, filteredUploads]);
+        return songItems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    }, [filteredSongs]);
 
     const selectableSongs = useMemo(
         () => filteredSongs.filter(song => !song.isGenerating),
@@ -549,63 +534,40 @@ export const SongList: React.FC<SongListProps> = ({
                         </div>
                     ) : (
                         listItems.map((item) => (
-                            item.type === 'song' ? (
-                                <SongItem
-                                    key={item.id}
-                                    song={item.song}
-                                    isCurrent={currentSong?.id === item.song.id}
-                                    isSelected={selectedSong?.id === item.song.id}
-                                    isSelectionMode={isSelecting}
-                                    isChecked={selectedIds.has(item.song.id)}
-                                    isLiked={likedSongIds.has(item.song.id)}
-                                    isPlaying={isPlaying}
-                                    isOwner={user?.id === item.song.userId}
-                                    now={now}
-                                    onPlay={() => onPlay(item.song)}
-                                    onSelect={() => onSelect(item.song)}
-                                    onToggleSelect={() => {
-                                        if (item.song.isGenerating) return;
-                                        setSelectedIds(prev => {
-                                            const next = new Set(prev);
-                                            if (next.has(item.song.id)) next.delete(item.song.id);
-                                            else next.add(item.song.id);
-                                            return next;
-                                        });
-                                    }}
-                                    onToggleLike={() => onToggleLike(item.song.id)}
-                                    onAddToPlaylist={() => onAddToPlaylist(item.song)}
-                                    onOpenVideo={() => onOpenVideo && onOpenVideo(item.song)}
-                                    onShowDetails={() => onShowDetails && onShowDetails(item.song)}
-                                    onNavigateToProfile={onNavigateToProfile}
-                                    onReusePrompt={() => onReusePrompt?.(item.song)}
-                                    onDelete={() => onDelete?.(item.song)}
-                                    onSongUpdate={onSongUpdate}
-                                    onUseAsReference={() => onUseAsReference?.(item.song)}
-                                    onCoverSong={() => onCoverSong?.(item.song)}
-                                    onAudioWarmup={onAudioWarmup}
-                                />
-                            ) : (
-                                <UploadItem
-                                    key={`upload_${item.id}`}
-                                    track={item.track}
-                                    onPlay={(audioUrl, title) => {
-                                        onPlay({
-                                            id: `upload_${item.id}`,
-                                            title,
-                                            lyrics: '',
-                                            style: 'Upload',
-                                            coverUrl: '',
-                                            duration: '0:00',
-                                            createdAt: item.createdAt,
-                                            tags: [],
-                                            audioUrl,
-                                            isPublic: false,
-                                        } as Song);
-                                    }}
-                                    onUseAsReference={() => onUseUploadAsReference?.(item.track)}
-                                    onCoverSong={() => onCoverUpload?.(item.track)}
-                                />
-                            )
+                            <SongItem
+                                key={item.id}
+                                song={item.song}
+                                isCurrent={currentSong?.id === item.song.id}
+                                isSelected={selectedSong?.id === item.song.id}
+                                isSelectionMode={isSelecting}
+                                isChecked={selectedIds.has(item.song.id)}
+                                isLiked={likedSongIds.has(item.song.id)}
+                                isPlaying={isPlaying}
+                                isOwner={user?.id === item.song.userId}
+                                now={now}
+                                onPlay={() => onPlay(item.song)}
+                                onSelect={() => onSelect(item.song)}
+                                onToggleSelect={() => {
+                                    if (item.song.isGenerating) return;
+                                    setSelectedIds(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(item.song.id)) next.delete(item.song.id);
+                                        else next.add(item.song.id);
+                                        return next;
+                                    });
+                                }}
+                                onToggleLike={() => onToggleLike(item.song.id)}
+                                onAddToPlaylist={() => onAddToPlaylist(item.song)}
+                                onOpenVideo={() => onOpenVideo && onOpenVideo(item.song)}
+                                onShowDetails={() => onShowDetails && onShowDetails(item.song)}
+                                onNavigateToProfile={onNavigateToProfile}
+                                onReusePrompt={() => onReusePrompt?.(item.song)}
+                                onDelete={() => onDelete?.(item.song)}
+                                onSongUpdate={onSongUpdate}
+                                onUseAsReference={() => onUseAsReference?.(item.song)}
+                                onCoverSong={() => onCoverSong?.(item.song)}
+                                onAudioWarmup={onAudioWarmup}
+                            />
                         ))
                     )}
                 </div>
@@ -688,6 +650,7 @@ const SongItem: React.FC<SongItemProps> = ({
     const [showDropdown, setShowDropdown] = useState(false);
     const [scoreModalOpen, setScoreModalOpen] = useState(false);
     const [imageError, setImageError] = useState(false);
+    const [coverRetry, setCoverRetry] = useState(0);
     const itemRef = useRef<HTMLDivElement>(null);
     const hasRequestedWarmupRef = useRef(false);
     const explicitDynamicLyrics = getExplicitDynamicLyricsFlag(song);
@@ -699,7 +662,22 @@ const SongItem: React.FC<SongItemProps> = ({
 
     useEffect(() => {
         setImageError(false);
+        setCoverRetry(0);
     }, [song.id, song.coverUrl]);
+
+    useEffect(() => {
+        if (!imageError || !song.coverUrl) return;
+        const delay = Math.min(30_000, 1_500 * (2 ** Math.min(coverRetry, 5)));
+        const timer = window.setTimeout(() => {
+            setCoverRetry(current => current + 1);
+            setImageError(false);
+        }, delay);
+        return () => window.clearTimeout(timer);
+    }, [imageError, song.coverUrl, coverRetry]);
+
+    const retryCoverUrl = song.coverUrl
+        ? `${song.coverUrl}${song.coverUrl.includes('?') ? '&' : '?'}cover_retry=${coverRetry}`
+        : '';
 
     useEffect(() => {
         if (explicitDynamicLyrics === false) {
@@ -788,7 +766,7 @@ const SongItem: React.FC<SongItemProps> = ({
                     }
                 }, 0);
             }}
-            className={`group relative flex items-center gap-4 p-2 pr-14 rounded-lg hover:bg-zinc-100 dark:hover:bg-[#18181b] transition-all cursor-pointer border ${isSelected ? 'bg-zinc-100 dark:bg-[#18181b] border-zinc-200 dark:border-white/10' : 'border-transparent bg-transparent'} ${song.audioUrl && !song.isGenerating ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            className={`group relative flex items-center gap-4 p-2 pr-14 rounded-lg hover:bg-zinc-100 dark:hover:bg-[#18181b] transition-all border ${isSelected ? 'bg-zinc-100 dark:bg-[#18181b] border-zinc-200 dark:border-white/10' : 'border-transparent bg-transparent'}`}
         >
             {isSelectionMode && (
                 <button
@@ -797,7 +775,7 @@ const SongItem: React.FC<SongItemProps> = ({
                         e.stopPropagation();
                         onToggleSelect();
                     }}
-                    className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isChecked
+                    className={`w-5 h-5 rounded border flex items-center justify-center transition-colors cursor-default ${isChecked
                             ? 'bg-[#8fb68f] border-[#8fb68f] text-[#132018]'
                             : 'border-zinc-300 dark:border-zinc-600 text-transparent hover:border-zinc-400 dark:hover:border-zinc-500'
                         } ${song.isGenerating ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -817,7 +795,7 @@ const SongItem: React.FC<SongItemProps> = ({
                     <AlbumCover seed={song.id || song.title} size="full" className={`w-full h-full ${song.isGenerating ? 'opacity-20 blur-sm' : 'opacity-100'}`} />
                 ) : (
                     <img
-                        src={song.coverUrl}
+                        src={retryCoverUrl}
                         alt={song.title}
                         className={`w-full h-full object-cover transition-opacity ${song.isGenerating ? 'opacity-20 blur-sm' : 'opacity-100'}`}
                         onError={() => setImageError(true)}
@@ -846,7 +824,7 @@ const SongItem: React.FC<SongItemProps> = ({
                     </div>
                 ) : (
                     <div
-                        className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[1px] cursor-pointer opacity-0 group-hover/image:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
+                        className="absolute inset-0 bg-black/40 flex items-center justify-center backdrop-blur-[1px] cursor-default opacity-0 group-hover/image:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
                         onClick={(e) => {
                             e.stopPropagation();
                             onPlay();
@@ -938,7 +916,7 @@ const SongItem: React.FC<SongItemProps> = ({
             {!song.isGenerating && (
                 <div className="flex shrink-0 items-center gap-2 pr-1">
                     <button
-                        className={`flex items-center gap-1 px-2.5 py-2 rounded-full transition-all ${isLiked ? 'opacity-100 text-[#6f8f72] dark:text-[#a8c9a4] bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-zinc-400 hover:bg-zinc-200 hover:text-black dark:hover:bg-white/5 dark:hover:text-white'}`}
+                        className={`flex cursor-pointer items-center gap-1 px-2.5 py-2 rounded-full transition-all ${isLiked ? 'opacity-100 text-[#6f8f72] dark:text-[#a8c9a4] bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-zinc-400 hover:bg-zinc-200 hover:text-black dark:hover:bg-white/5 dark:hover:text-white'}`}
                         onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
                         aria-label={isLiked ? 'Unlike song' : 'Like song'}
                     >
@@ -950,7 +928,7 @@ const SongItem: React.FC<SongItemProps> = ({
 
                     {scoreRequested && (
                         <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                            className="p-2 rounded-full cursor-default hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
                             onClick={(e) => { e.stopPropagation(); setScoreModalOpen(true); }}
                             title="View scores"
                         >
@@ -960,7 +938,7 @@ const SongItem: React.FC<SongItemProps> = ({
 
                     {/* Info Button - Visible only on small/medium screens where sidebar is hidden */}
                     <button
-                        className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors xl:hidden"
+                        className="p-2 rounded-full cursor-default hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors xl:hidden"
                         onClick={(e) => { e.stopPropagation(); if (onShowDetails) onShowDetails(); }}
                         title="Song Details"
                     >
@@ -969,7 +947,7 @@ const SongItem: React.FC<SongItemProps> = ({
 
                     <div className="relative">
                         <button
-                            className="p-2 rounded-full hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                            className="p-2 rounded-full cursor-pointer hover:bg-zinc-200 dark:hover:bg-white/5 text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setShowDropdown(!showDropdown);
@@ -1084,50 +1062,3 @@ const SongItem: React.FC<SongItemProps> = ({
     );
 };
 
-const UploadItem: React.FC<{
-    track: { id: string; filename: string; audio_url: string; duration?: number | null };
-    onPlay: (audioUrl: string, title: string) => void;
-    onUseAsReference?: () => void;
-    onCoverSong?: () => void;
-}> = ({ track, onPlay, onUseAsReference, onCoverSong }) => {
-    const title = track.filename.replace(/\.[^/.]+$/, '');
-    const duration = track.duration
-        ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}`
-        : '--:--';
-    return (
-        <SongItem
-            song={{
-                id: `upload_${track.id}`,
-                title,
-                lyrics: '',
-                style: 'Upload',
-                coverUrl: '',
-                duration,
-                createdAt: new Date(),
-                tags: [],
-                audioUrl: track.audio_url,
-                isPublic: false,
-            } as Song}
-            isCurrent={false}
-            isSelected={false}
-            isSelectionMode={false}
-            isChecked={false}
-            isLiked={false}
-            isPlaying={false}
-            isOwner={false}
-            now={Date.now()}
-            onPlay={() => onPlay(track.audio_url, title)}
-            onSelect={() => onPlay(track.audio_url, title)}
-            onToggleSelect={() => undefined}
-            onToggleLike={() => undefined}
-            onAddToPlaylist={() => undefined}
-            onOpenVideo={() => undefined}
-            onShowDetails={() => undefined}
-            onNavigateToProfile={() => undefined}
-            onReusePrompt={undefined}
-            onDelete={() => undefined}
-            onUseAsReference={onUseAsReference}
-            onCoverSong={onCoverSong}
-        />
-    );
-};

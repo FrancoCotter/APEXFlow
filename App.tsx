@@ -1705,6 +1705,13 @@ function AppContent() {
     setIsVideoModalOpen(true);
   };
 
+  const pauseMainPlayback = useCallback(() => {
+    setIsPlaying(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+  }, []);
+
   // Handle username setup
   const handleUsernameSubmit = async (username: string) => {
     await setupUser(username);
@@ -1723,6 +1730,7 @@ function AppContent() {
             playlists={playlists}
             referenceTracks={referenceTracks}
             onPlaySong={playSong}
+            onPauseMainPlayback={pauseMainPlayback}
             onCreatePlaylist={() => {
               setSongToAddToPlaylist(null);
               setIsCreatePlaylistModalOpen(true);
@@ -1937,6 +1945,7 @@ function AppContent() {
         />
 
         <main className="flex-1 flex overflow-hidden relative">
+        
           {renderContent()}
         </main>
       </div>

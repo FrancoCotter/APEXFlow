@@ -621,6 +621,21 @@ function updateJobFromPythonLog(job: ActiveJob, line: string): void {
   }
 
   if (
+    normalized.includes('get_lyric_timestamp failed')
+    || normalized.includes('Error generating LRC for sample')
+  ) {
+    const oomMatch = normalized.match(/out of memory|cuda oom|cuda out of memory/i);
+    setJobProgressWindow(
+      job,
+      oomMatch ? 'Synced lyrics failed to save (CUDA OOM)...' : 'Synced lyrics failed to save...',
+      0.995,
+      0.998,
+      8
+    );
+    return;
+  }
+
+  if (
     normalized.includes('Generating synced lyrics for sample')
     || normalized.includes('get_lyric_timestamp')
   ) {
@@ -1208,12 +1223,14 @@ function runPythonGeneration(
     const args = [PYTHON_SCRIPT, ...scriptArgs];
 
     console.log(`[ACE-Step] [Spawn] Spawning Python command: "${pythonPath}" ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`);
+    const acestepGenerationTimeoutSeconds = Math.ceil(timeoutMs / 1000);
 
     const proc = spawn(pythonPath, args, {
       cwd: ACESTEP_DIR,
       env: {
         ...process.env,
         ACESTEP_PATH: ACESTEP_DIR,
+        ACESTEP_GENERATION_TIMEOUT: String(acestepGenerationTimeoutSeconds),
         PYTHONIOENCODING: 'utf-8',
         PYTHONUTF8: '1',
         LANG: 'C.UTF-8',
