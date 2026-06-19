@@ -314,8 +314,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
       {activeTab === 'liked' && (
         <div>
-          <div className="group mb-8 flex items-end gap-6 rounded-xl border border-zinc-200 bg-gradient-to-b from-[#9bb89d]/10 to-zinc-50 p-6 transition-colors hover:bg-zinc-100 dark:border-white/5 dark:from-[#6f8f72]/35 dark:to-zinc-900/50 dark:hover:bg-white/5">
-            <div className="flex h-40 w-40 items-center justify-center rounded bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] shadow-2xl">
+          <div className="group mb-8 flex items-end gap-6 rounded-xl border border-zinc-200 bg-[#f4f6f1] p-6 transition-colors hover:bg-zinc-100 dark:border-white/5 dark:bg-[#20251f] dark:hover:bg-white/5">
+            <div className="flex h-40 w-40 items-center justify-center rounded apex-accent-fill shadow-2xl">
               <Heart fill="white" size={64} className="text-white" />
             </div>
             <div className="mb-2">

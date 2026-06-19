@@ -52,11 +52,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="px-3 mb-8 flex items-center">
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-2xl bg-[linear-gradient(90deg,rgba(182,214,198,1)_30%,rgba(235,199,204,1)_100%)] text-[#132018] flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform flex-shrink-0"
+            className="w-9 h-9 rounded-xl apex-accent-fill flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-all flex-shrink-0"
             onClick={() => onNavigate('create')}
             title={t('aceStepUI')}
           >
-            <BrandMark className="w-6 h-6" />
+            <BrandMark className="w-5 h-5" />
           </div>
           {isOpen && (
             <span className="text-lg font-bold text-zinc-900 dark:text-white whitespace-nowrap">APEXFlow</span>

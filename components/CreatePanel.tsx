@@ -1501,7 +1501,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 px-6 py-5 shadow-xl">
               {dragKind !== 'audio' && (
-                <div className="w-12 h-12 rounded-full bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] text-[#132018] flex items-center justify-center shadow-lg">
+                <div className="w-12 h-12 rounded-full apex-accent-fill flex items-center justify-center shadow-lg">
                   <Upload size={22} />
                 </div>
               )}
@@ -1916,7 +1916,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleAudio('reference')}
-                        className="relative flex-shrink-0 w-10 h-10 rounded-full bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] text-[#132018] flex items-center justify-center shadow-lg shadow-[#8fb68f]/20 hover:scale-105 transition-transform"
+                        className="relative flex-shrink-0 w-10 h-10 rounded-full apex-accent-fill flex items-center justify-center shadow-lg shadow-[#8fb68f]/20 hover:scale-105 transition-all"
                       >
                         {referencePlaying ? (
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
@@ -1944,7 +1944,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                             }}
                           >
                             <div
-                              className="h-full bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] rounded-full transition-all relative"
+                              className="h-full apex-accent-fill rounded-full transition-all relative"
                               style={{ width: referenceDuration ? `${Math.min(100, (referenceTime / referenceDuration) * 100)}%` : '0%' }}
                             >
                               <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity" />
@@ -1974,7 +1974,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                     <button
                       type="button"
                       onClick={() => toggleAudio('source')}
-                      className="relative flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20 hover:scale-105 transition-transform"
+                      className="relative flex-shrink-0 w-10 h-10 rounded-full apex-accent-fill-strong flex items-center justify-center shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all"
                     >
                       {sourcePlaying ? (
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>
@@ -2002,7 +2002,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                           }}
                         >
                           <div
-                            className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all relative"
+                            className="h-full apex-accent-fill-strong rounded-full transition-all relative"
                             style={{ width: sourceDuration ? `${Math.min(100, (sourceTime / sourceDuration) * 100)}%` : '0%' }}
                           >
                             <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity" />
@@ -2322,7 +2322,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                       disabled={!loraPath.trim() || isLoraLoading}
                       className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                         loraLoaded
-                          ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/20 hover:from-green-600 hover:to-emerald-700'
+                        ? 'apex-accent-fill-strong shadow-lg shadow-green-500/20'
                           : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                       }`}
                     >
@@ -2486,7 +2486,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                     onClick={() => { setBulkCount(count); localStorage.setItem('ace-bulkCount', String(count)); }}
                     className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                       bulkCount === count
-                        ? 'bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] text-[#132018] shadow-md'
+                        ? 'apex-accent-fill shadow-md'
                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                     }`}
                   >
@@ -3276,7 +3276,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                                   }}
                                 >
                                   <div
-                                    className="h-full bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] rounded-full relative"
+                                    className="h-full apex-accent-fill rounded-full relative"
                                     style={{ width: modalTrackDuration > 0 ? `${(modalTrackTime / modalTrackDuration) * 100}%` : '0%' }}
                                   >
                                     <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity" />
@@ -3359,7 +3359,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                                 }}
                               >
                                 <div
-                                  className="h-full bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] rounded-full relative"
+                                  className="h-full apex-accent-fill rounded-full relative"
                                   style={{ width: modalTrackDuration > 0 ? `${(modalTrackTime / modalTrackDuration) * 100}%` : '0%' }}
                                 >
                                   <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity" />
@@ -3431,7 +3431,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       <div className="p-4 mt-auto sticky bottom-0 bg-zinc-50/95 dark:bg-suno-panel/95 backdrop-blur-sm z-10 border-t border-zinc-200 dark:border-white/5 space-y-3">
         <button
           onClick={handleGenerate}
-          className="w-full h-12 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all transform active:scale-[0.98] bg-[linear-gradient(9deg,rgba(182,214,198,1)_25%,rgba(235,199,204,1)_100%)] text-[#132018] shadow-lg hover:brightness-110"
+          className="w-full h-12 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all transform active:scale-[0.98] apex-accent-fill shadow-lg"
           disabled={isGenerating || !isAuthenticated}
         >
           <Sparkles size={18} />

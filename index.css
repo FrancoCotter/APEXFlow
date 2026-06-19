@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --apex-accent-solid: #b8ccb1;
+  --apex-accent-solid-hover: #c3d4bd;
+  --apex-accent-strong: #88a07f;
+  --apex-accent-strong-hover: #799171;
+  --apex-accent-ink: #132018;
+  --apex-accent-muted: rgba(184, 204, 177, 0.18);
+  --apex-accent-muted-hover: rgba(184, 204, 177, 0.28);
+}
+
 html.theme-switching *,
 html.theme-switching *::before,
 html.theme-switching *::after {
@@ -149,6 +159,33 @@ html.theme-switching *::after {
   background: #8fb68f;
   border: 2px solid rgba(255, 255, 255, 0.92);
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
+}
+
+.apex-accent-fill {
+  background-color: var(--apex-accent-solid);
+  color: var(--apex-accent-ink);
+}
+
+.apex-accent-fill:hover {
+  background-color: var(--apex-accent-solid-hover);
+}
+
+.apex-accent-fill-strong {
+  background-color: var(--apex-accent-strong);
+  color: #fff;
+}
+
+.apex-accent-fill-strong:hover {
+  background-color: var(--apex-accent-strong-hover);
+}
+
+.apex-accent-muted {
+  background-color: var(--apex-accent-muted);
+  color: #a8c9a4;
+}
+
+.apex-accent-muted:hover {
+  background-color: var(--apex-accent-muted-hover);
 }
 
 @media (prefers-reduced-motion: reduce) {

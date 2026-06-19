@@ -788,7 +788,7 @@ export const TrainingPanel: React.FC = () => {
                   <FieldRow label={t('datasetName')}>
                     <input type="text" value={uploadDatasetName} onChange={e => setUploadDatasetName(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-[#8fb68f]/50" placeholder="my_lora_dataset" />
                   </FieldRow>
-                  <button onClick={handleUploadAndBuild} disabled={uploading || !uploadDatasetName.trim()} className="w-full py-2 bg-[linear-gradient(90deg,rgba(182,214,198,1)_30%,rgba(235,199,204,1)_100%)] hover:brightness-110 text-[#132018] rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
+                  <button onClick={handleUploadAndBuild} disabled={uploading || !uploadDatasetName.trim()} className="w-full py-2 apex-accent-fill rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
                     {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                     Upload & Create Dataset ({queuedFiles.length} files)
                   </button>
@@ -1081,7 +1081,7 @@ export const TrainingPanel: React.FC = () => {
             {/* Training Controls */}
             <div className="flex gap-2">
               {!isTraining ? (
-                <button onClick={handleStartTraining} className="flex-1 py-2.5 bg-[linear-gradient(90deg,rgba(182,214,198,1)_30%,rgba(235,199,204,1)_100%)] hover:brightness-110 text-[#132018] rounded-lg text-sm font-medium flex items-center justify-center gap-2">
+                <button onClick={handleStartTraining} className="flex-1 py-2.5 apex-accent-fill rounded-lg text-sm font-medium flex items-center justify-center gap-2">
                   <Play size={16} />
                   {t('startTraining')}
                 </button>
@@ -1123,7 +1123,7 @@ export const TrainingPanel: React.FC = () => {
                   <input type="text" value={exportOutputDir} onChange={e => setExportOutputDir(e.target.value)} className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-[#8fb68f]/50" />
                 </FieldRow>
               </div>
-              <button onClick={handleExportLora} disabled={exporting} className="w-full mt-3 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50">
+              <button onClick={handleExportLora} disabled={exporting} className="w-full mt-3 py-2.5 apex-accent-fill-strong rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50">
                 {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                 Export LoRA
               </button>
