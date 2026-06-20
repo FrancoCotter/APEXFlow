@@ -7,6 +7,33 @@ import { getStorageProvider } from '../services/storage/factory.js';
 
 const router = Router();
 
+function toStorageKey(assetUrl: string): string | null {
+  if (!assetUrl) return null;
+  if (assetUrl.startsWith('/audio/')) {
+    return assetUrl.replace('/audio/', '');
+  }
+  if (assetUrl.startsWith('s3://')) {
+    return assetUrl.replace('s3://', '');
+  }
+  return null;
+}
+
+function replaceExtension(filepath: string, nextExtension: string): string {
+  const dotIndex = filepath.lastIndexOf('.');
+  if (dotIndex <= 0) {
+    return `${filepath}${nextExtension}`;
+  }
+  return `${filepath.slice(0, dotIndex)}${nextExtension}`;
+}
+
+async function deleteIfPresent(storage: ReturnType<typeof getStorageProvider>, key: string): Promise<void> {
+  try {
+    await storage.delete(key);
+  } catch (err) {
+    console.error(`Failed to delete asset ${key}:`, err);
+  }
+}
+
 // Helper: resolve audio URL (generates signed URL for S3)
 async function resolveAudioUrl(audioUrl: string | null): Promise<string | null> {
   if (!audioUrl) return null;
@@ -428,7 +455,7 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
 // Delete song
 router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const check = await pool.query('SELECT user_id, audio_url, cover_url FROM songs WHERE id = $1', [req.params.id]);
+    const check = await pool.query('SELECT user_id, audio_url, cover_url, video_url FROM songs WHERE id = $1', [req.params.id]);
     if (check.rows.length === 0) {
       res.status(404).json({ error: 'Song not found' });
       return;
@@ -443,24 +470,26 @@ router.delete('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Res
 
     // Delete audio file from storage
     if (song.audio_url) {
-      try {
-        // Handle local storage paths (/audio/filename.mp3 -> filename.mp3)
-        const storageKey = song.audio_url.startsWith('/audio/')
-          ? song.audio_url.replace('/audio/', '')
-          : song.audio_url.replace('s3://', '');
-        await storage.delete(storageKey);
-      } catch (err) {
-        console.error(`Failed to delete audio file ${song.audio_url}:`, err);
+      const storageKey = toStorageKey(song.audio_url);
+      if (storageKey) {
+        await deleteIfPresent(storage, storageKey);
+        await deleteIfPresent(storage, replaceExtension(storageKey, '.lrc'));
+        await deleteIfPresent(storage, replaceExtension(storageKey, '.vtt'));
       }
     }
 
     // Delete cover image if it's stored locally
-    if (song.cover_url && song.cover_url.startsWith('/audio/')) {
-      try {
-        const coverKey = song.cover_url.replace('/audio/', '');
-        await storage.delete(coverKey);
-      } catch (err) {
-        console.error(`Failed to delete cover ${song.cover_url}:`, err);
+    if (song.cover_url) {
+      const coverKey = toStorageKey(song.cover_url);
+      if (coverKey) {
+        await deleteIfPresent(storage, coverKey);
+      }
+    }
+
+    if (song.video_url) {
+      const videoKey = toStorageKey(song.video_url);
+      if (videoKey) {
+        await deleteIfPresent(storage, videoKey);
       }
     }
 

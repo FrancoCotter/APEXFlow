@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Song, Playlist } from '../types';
-import { Heart, Plus, Music, Play, Pause, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Plus, Music, Play, Pause, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { AlbumCover } from './AlbumCover';
@@ -55,13 +55,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 }) => {
   const { t } = useI18n();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'all' | 'playlists' | 'liked' | 'uploads'>('all');
+  const [activeTab, setActiveTab] = useState<'playlists' | 'liked' | 'uploads'>('liked');
   const [openMenuSong, setOpenMenuSong] = useState<Song | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null);
   const [previewProgress, setPreviewProgress] = useState(0);
 
-  const completedAllSongs = allSongs.filter(song => !song.isGenerating && hasSongPlaybackSource(song));
   const completedLikedSongs = likedSongs.filter(song => !song.isGenerating && hasSongPlaybackSource(song));
   const isSongPlaying = (song: Song) => currentSong?.id === song.id && isPlaying;
 
@@ -235,13 +234,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
       <div className="mb-8 flex items-center gap-4 border-b border-zinc-200 pb-1 dark:border-white/10">
         <button
-          onClick={() => setActiveTab('all')}
-          className={`relative pb-3 text-sm font-bold transition-colors ${activeTab === 'all' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
-        >
-          All Songs
-          {activeTab === 'all' && <div className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-green-500"></div>}
-        </button>
-        <button
           onClick={() => setActiveTab('liked')}
           className={`relative pb-3 text-sm font-bold transition-colors ${activeTab === 'liked' ? 'text-zinc-900 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
         >
@@ -264,14 +256,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </button>
       </div>
 
-      {activeTab === 'all' && (
+      {activeTab === 'liked' && (
         <div className="space-y-1">
-          {completedAllSongs.length === 0 ? (
-            <div className="text-sm text-zinc-500 dark:text-zinc-400">No songs yet.</div>
+          {completedLikedSongs.length === 0 ? (
+            <div className="text-sm text-zinc-500 dark:text-zinc-400">No favorites yet.</div>
           ) : (
-            completedAllSongs.map((song, idx) => (
+            completedLikedSongs.map((song, idx) => (
               <div key={song.id} className="group flex items-center gap-4 rounded p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/10">
-                {rowLeadingControl(song, idx, completedAllSongs)}
+                {rowLeadingControl(song, idx, completedLikedSongs)}
 
                 {song.coverUrl ? (
                   <img src={song.coverUrl} className="h-10 w-10 rounded object-cover shadow-sm" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
@@ -309,83 +301,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </div>
             ))
           )}
-        </div>
-      )}
-
-      {activeTab === 'liked' && (
-        <div>
-          <div className="group mb-8 flex items-end gap-6 rounded-xl border border-zinc-200 bg-[#f4f6f1] p-6 transition-colors hover:bg-zinc-100 dark:border-white/5 dark:bg-[#20251f] dark:hover:bg-white/5">
-            <div className="flex h-40 w-40 items-center justify-center rounded apex-accent-fill shadow-2xl">
-              <Heart fill="white" size={64} className="text-white" />
-            </div>
-            <div className="mb-2">
-              <h2 className="mb-2 text-sm font-bold uppercase text-zinc-500 dark:text-white">{t('playlist')}</h2>
-              <h1 className="mb-4 text-5xl font-extrabold text-zinc-900 dark:text-white">{t('likedSongs')}</h1>
-              <div className="text-sm font-medium text-zinc-500 dark:text-zinc-300">
-                {completedLikedSongs.length} {t('songs')}
-              </div>
-            </div>
-            <div className="ml-auto mb-2 opacity-0 transition-opacity group-hover:opacity-100">
-              <button
-                type="button"
-                disabled={completedLikedSongs.length === 0}
-                aria-label={completedLikedSongs[0] && isSongPlaying(completedLikedSongs[0]) ? 'Pause liked songs' : 'Play liked songs'}
-                className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500 text-black shadow-lg transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:bg-zinc-500"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (completedLikedSongs.length > 0) handleSongPlayback(completedLikedSongs[0], completedLikedSongs);
-                }}
-              >
-                {completedLikedSongs[0] && isSongPlaying(completedLikedSongs[0])
-                  ? <Pause fill="currentColor" size={28} />
-                  : <Play fill="currentColor" className="ml-1" size={28} />
-                }
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            {completedLikedSongs.map((song, idx) => (
-              <div key={song.id} className="group flex items-center gap-4 rounded p-2 transition-colors hover:bg-zinc-100 dark:hover:bg-white/10">
-                {rowLeadingControl(song, idx, completedLikedSongs)}
-
-                {song.coverUrl ? (
-                  <img src={song.coverUrl} className="h-10 w-10 rounded object-cover shadow-sm" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                ) : (
-                  <AlbumCover seed={song.id || song.title} size="sm" className="h-10 w-10" />
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-zinc-900 dark:text-white">{song.title}</div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400">{song.style}</div>
-                </div>
-
-                <div className="text-sm font-mono text-zinc-500 dark:text-zinc-400">{song.duration}</div>
-                <div className="text-green-500"><Heart fill="#22c55e" size={16} /></div>
-                <div className="relative ml-2">
-                  <button
-                    className="rounded-full p-2 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/5 dark:hover:text-white"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpenMenuSong(prev => prev?.id === song.id ? null : song);
-                    }}
-                  >
-                    <MoreHorizontal size={16} />
-                  </button>
-                  <SongDropdownMenu
-                    song={song}
-                    isOpen={openMenuSong?.id === song.id}
-                    onClose={() => setOpenMenuSong(null)}
-                    isOwner={user ? song.userId === user.id : false}
-                    onCreateVideo={() => onOpenVideo?.(song)}
-                    onReusePrompt={() => onReusePrompt?.(song)}
-                    onAddToPlaylist={() => onAddToPlaylist(song)}
-                    onDelete={() => onDeleteSong?.(song)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 

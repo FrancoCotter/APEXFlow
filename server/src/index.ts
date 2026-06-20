@@ -125,7 +125,7 @@ app.get('/api/covers/cache', async (req, res) => {
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), 12000);
       try {
         response = await fetch(rawUrl, { signal: controller.signal });
         if (response.ok) break;
@@ -140,9 +140,8 @@ app.get('/api/covers/cache', async (req, res) => {
     }
 
     if (!response?.ok) {
-      console.error('Cover cache fetch failed after retries:', lastError);
-      res.setHeader('Cache-Control', 'no-store');
-      res.status(502).json({ error: 'Failed to fetch cover after retries' });
+      console.warn('Cover cache fetch failed after retries, redirecting to source URL:', lastError);
+      res.redirect(302, rawUrl);
       return;
     }
 

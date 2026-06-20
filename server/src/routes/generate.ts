@@ -72,26 +72,246 @@ async function loadRandomLocalExample(mode: ExampleMode): Promise<LocalExample |
   return null;
 }
 
-// Auto-generate a song title from lyrics or style when none is provided
-function autoTitle(params: { title?: string; lyrics?: string; instrumental?: boolean; style?: string; songDescription?: string }): string {
-  if (params.title?.trim()) return params.title.trim();
+const TITLE_FILLER_WORDS = new Set([
+  'a', 'an', 'and', 'or', 'but', 'the', 'this', 'that', 'these', 'those', 'my', 'your', 'our', 'their',
+  'to', 'for', 'from', 'with', 'without', 'into', 'onto', 'upon', 'of', 'in', 'on', 'at', 'by', 'as',
+  'is', 'are', 'am', 'was', 'were', 'be', 'been', 'being', 'do', 'did', 'does', 'done', 'can', 'could',
+  'will', 'would', 'should', 'just', 'yeah', 'yah', 'yea', 'oh', 'ah', 'uh', 'ooh', 'la', 'na', 'hey',
+  'yo', 'baby', 'ouais', 'oui', 'non', 'mais', 'et', 'de', 'des', 'du', 'le', 'la', 'les', 'un', 'une',
+  'je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles',
+]);
 
-  // Try first meaningful lyric line (skip section markers like [verse], [chorus])
-  if (!params.instrumental && params.lyrics) {
-    for (const line of params.lyrics.split('\n')) {
-      const t = line.trim();
-      if (t && !/^\[.*\]$/.test(t)) {
-        return t.length > 40 ? t.slice(0, 40).trimEnd() + '…' : t;
+function normalizeTitleWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function trimTitlePunctuation(value: string): string {
+  return normalizeTitleWhitespace(
+    value
+      .replace(/^[\s"'“”‘’`~!@#$%^&*()_+=\-[\]{}<>|\\/.,;:!?]+/u, '')
+      .replace(/[\s"'“”‘’`~!@#$%^&*()_+=\-[\]{}<>|\\/.,;:!?]+$/u, '')
+  );
+}
+
+function removeLeadingSectionMarkers(line: string): string {
+  return trimTitlePunctuation(
+    line
+      .replace(/\[[^\]]{1,40}\]/g, ' ')
+      .replace(/\([^)]{1,40}\)/g, ' ')
+      .replace(/\{[^}]{1,40}\}/g, ' ')
+  );
+}
+
+function isLikelySectionLine(line: string): boolean {
+  const compact = line.replace(/\s+/g, '');
+  return (
+    !compact ||
+    /^\[[^\]]+\]$/u.test(line) ||
+    /^\([^)]+\)$/u.test(line) ||
+    /^[{][^}]+[}]$/u.test(line)
+  );
+}
+
+function isSpaceSeparatedLanguage(value: string): boolean {
+  return /\s/u.test(value);
+}
+
+function countWords(value: string): number {
+  return value.split(/\s+/).filter(Boolean).length;
+}
+
+function titleCaseLatin(value: string): string {
+  const lower = value.toLocaleLowerCase();
+  return lower.replace(/\b([\p{L}])([\p{L}'’\-]*)/gu, (_match, first: string, rest: string) => {
+    return `${first.toLocaleUpperCase()}${rest}`;
+  });
+}
+
+function formatTitleCandidate(value: string): string {
+  const cleaned = trimTitlePunctuation(value);
+  if (!cleaned) return '';
+
+  const hasLatin = /[\p{Script=Latin}]/u.test(cleaned);
+  const hasCasedLatin = /[A-Z]/.test(cleaned) || /[a-z]/.test(cleaned);
+  const latinOnly = cleaned.replace(/[^\p{Script=Latin}\s'’\-]/gu, '');
+
+  if (hasLatin && hasCasedLatin && latinOnly && latinOnly === latinOnly.toLocaleLowerCase()) {
+    return titleCaseLatin(cleaned);
+  }
+
+  return cleaned;
+}
+
+function buildWordWindowCandidates(line: string): string[] {
+  const words = line.split(/\s+/).map(trimTitlePunctuation).filter(Boolean);
+  if (words.length <= 1) return [];
+
+  const candidates = new Set<string>();
+  const maxWindow = Math.min(5, words.length);
+
+  for (let size = 2; size <= maxWindow; size += 1) {
+    for (let start = 0; start <= words.length - size; start += 1) {
+      const window = words.slice(start, start + size);
+      const contentWords = window.filter(word => !TITLE_FILLER_WORDS.has(word.toLocaleLowerCase()));
+      if (contentWords.length === 0) continue;
+      candidates.add(window.join(' '));
+    }
+  }
+
+  return [...candidates];
+}
+
+function buildNonSpaceCandidates(line: string): string[] {
+  const cleaned = trimTitlePunctuation(line);
+  if (!cleaned) return [];
+
+  const chars = Array.from(cleaned);
+  const maxChars = chars.length <= 12 ? chars.length : 10;
+  const primary = chars.slice(0, maxChars).join('');
+  return primary ? [primary] : [];
+}
+
+function buildTitleCandidatesFromLine(line: string): string[] {
+  const cleaned = removeLeadingSectionMarkers(line);
+  if (!cleaned) return [];
+
+  const candidates = new Set<string>([cleaned]);
+  for (const segment of cleaned.split(/[|/\\•·:;!?。！？、，]+/u).map(trimTitlePunctuation).filter(Boolean)) {
+    candidates.add(segment);
+  }
+
+  for (const segment of cleaned.split(/[,\-–—]+/u).map(trimTitlePunctuation).filter(Boolean)) {
+    candidates.add(segment);
+  }
+
+  if (isSpaceSeparatedLanguage(cleaned)) {
+    for (const candidate of buildWordWindowCandidates(cleaned)) {
+      candidates.add(candidate);
+    }
+  } else {
+    for (const candidate of buildNonSpaceCandidates(cleaned)) {
+      candidates.add(candidate);
+    }
+  }
+
+  return [...candidates];
+}
+
+function scoreTitleCandidate(candidate: string, sourceLine: string, repetitions: Map<string, number>): number {
+  const normalized = trimTitlePunctuation(candidate);
+  if (!normalized) return -Infinity;
+
+  let score = 0;
+
+  if (isSpaceSeparatedLanguage(normalized)) {
+    const wordCount = countWords(normalized);
+    if (wordCount === 1) score += 4;
+    else if (wordCount <= 4) score += 14;
+    else if (wordCount <= 6) score += 8;
+    else score -= (wordCount - 6) * 6;
+
+    const words = normalized.split(/\s+/).filter(Boolean);
+    const contentWords = words.filter(word => !TITLE_FILLER_WORDS.has(word.toLocaleLowerCase()));
+    score += contentWords.length * 2;
+
+    const firstWord = words[0]?.toLocaleLowerCase();
+    if (firstWord && TITLE_FILLER_WORDS.has(firstWord)) score -= 8;
+    if (/^[\p{Script=Latin}\s'’\-]+$/u.test(normalized) && /^[a-z]/.test(normalized)) score -= 3;
+  } else {
+    const charCount = Array.from(normalized).length;
+    if (charCount >= 2 && charCount <= 8) score += 16;
+    else if (charCount <= 12) score += 10;
+    else score -= (charCount - 12) * 3;
+  }
+
+  if (normalized === sourceLine) score += 1;
+  if (/[.!?。！？]$/u.test(candidate)) score -= 6;
+  if (/["“”‘’]/u.test(candidate)) score -= 2;
+
+  const repetitionCount = repetitions.get(normalized.toLocaleLowerCase()) || 0;
+  if (repetitionCount > 1) score += Math.min(8, (repetitionCount - 1) * 3);
+
+  return score;
+}
+
+function autoTitleFromLyrics(lyrics: string): string | null {
+  const lines = lyrics
+    .split('\n')
+    .map(line => normalizeTitleWhitespace(line))
+    .filter(line => line && !isLikelySectionLine(line))
+    .slice(0, 12);
+
+  if (lines.length === 0) return null;
+
+  const repetitions = new Map<string, number>();
+  for (const line of lines) {
+    for (const candidate of buildTitleCandidatesFromLine(line)) {
+      const key = trimTitlePunctuation(candidate).toLocaleLowerCase();
+      if (!key) continue;
+      repetitions.set(key, (repetitions.get(key) || 0) + 1);
+    }
+  }
+
+  let bestCandidate = '';
+  let bestScore = -Infinity;
+
+  for (const line of lines) {
+    const cleanedLine = removeLeadingSectionMarkers(line);
+    if (!cleanedLine) continue;
+
+    for (const candidate of buildTitleCandidatesFromLine(cleanedLine)) {
+      const score = scoreTitleCandidate(candidate, cleanedLine, repetitions);
+      if (score > bestScore) {
+        bestScore = score;
+        bestCandidate = candidate;
       }
     }
   }
 
-  // Fall back to first 4 words of style or description
-  const source = params.style || params.songDescription || '';
-  if (source) {
-    const words = source.trim().split(/\s+/).slice(0, 4).join(' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
+  const formatted = formatTitleCandidate(bestCandidate);
+  return formatted || null;
+}
+
+function autoTitleFromStyle(source: string): string | null {
+  const cleaned = normalizeTitleWhitespace(
+    source
+      .replace(/[()[\]{}]/g, ' ')
+      .replace(/\s+/g, ' ')
+  );
+  if (!cleaned) return null;
+
+  const primarySegment = cleaned
+    .split(/[|/\\•·;:!?。！？]+/u)
+    .map(trimTitlePunctuation)
+    .find(Boolean);
+
+  if (!primarySegment) return null;
+
+  if (isSpaceSeparatedLanguage(primarySegment)) {
+    const words = primarySegment
+      .split(/\s+/)
+      .map(trimTitlePunctuation)
+      .filter(Boolean)
+      .filter(word => !TITLE_FILLER_WORDS.has(word.toLocaleLowerCase()))
+      .slice(0, 4);
+
+    return words.length > 0 ? formatTitleCandidate(words.join(' ')) : null;
   }
+
+  return formatTitleCandidate(buildNonSpaceCandidates(primarySegment)[0] || primarySegment);
+}
+
+// Auto-generate a song title from lyrics or style when none is provided
+function autoTitle(params: { title?: string; lyrics?: string; instrumental?: boolean; style?: string; songDescription?: string }): string {
+  if (params.title?.trim()) return params.title.trim();
+
+  if (!params.instrumental && params.lyrics) {
+    const lyricTitle = autoTitleFromLyrics(params.lyrics);
+    if (lyricTitle) return lyricTitle;
+  }
+
+  const styleTitle = autoTitleFromStyle(params.style || params.songDescription || '');
+  if (styleTitle) return styleTitle;
 
   return 'Untitled';
 }
@@ -255,6 +475,168 @@ interface GenerateBody {
   vaeModel?: string;
 }
 
+type FormatInputParams = {
+  caption: string;
+  lyrics?: string;
+  bpm?: number;
+  duration?: number;
+  keyScale?: string;
+  timeSignature?: string;
+  temperature?: number;
+  topK?: number;
+  topP?: number;
+  lmModel?: string;
+  lmBackend?: string;
+  timeoutMs?: number;
+  fallbackOnAnyError?: boolean;
+};
+
+type FormatInputResult = {
+  title?: string;
+  caption?: string;
+  lyrics?: string;
+  bpm?: number;
+  duration?: number;
+  key_scale?: string;
+  vocal_language?: string;
+  time_signature?: string;
+  status_message?: string;
+  success?: boolean;
+};
+
+type TitleSource = 'manual' | 'rule';
+
+type TitleGenerationMeta = {
+  source: TitleSource;
+  usedLm: boolean;
+  lmModel?: string;
+  thinking: boolean;
+  usedRuleFallback: boolean;
+};
+
+async function requestFormattedInput({
+  caption,
+  lyrics,
+  bpm,
+  duration,
+  keyScale,
+  timeSignature,
+  temperature,
+  topK,
+  topP,
+  lmModel,
+  lmBackend,
+  timeoutMs = 300_000,
+  fallbackOnAnyError = false,
+}: FormatInputParams): Promise<FormatInputResult> {
+  const ACESTEP_API_URL = config.acestep.apiUrl;
+
+  const paramObj: Record<string, unknown> = {};
+  if (bpm && bpm > 0) paramObj.bpm = bpm;
+  if (duration && duration > 0) paramObj.duration = duration;
+  if (keyScale) paramObj.key = keyScale;
+  if (timeSignature) paramObj.time_signature = timeSignature;
+
+  try {
+    const apiRes = await fetch(`${ACESTEP_API_URL}/format_input`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: caption,
+        lyrics: lyrics || '',
+        temperature: temperature ?? 0.85,
+        param_obj: paramObj,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    const apiData = await apiRes.json() as any;
+    if (!apiRes.ok || apiData.code !== 200) {
+      const errMsg = apiData.error || apiData.detail || `Format API returned ${apiRes.status}`;
+      throw new Error(errMsg);
+    }
+
+    const d = apiData.data || {};
+    return {
+      title: d.title,
+      caption: d.caption,
+      lyrics: d.lyrics,
+      bpm: d.bpm,
+      duration: d.duration,
+      key_scale: d.key_scale,
+      time_signature: d.time_signature,
+      vocal_language: d.vocal_language,
+      status_message: d.status_message,
+      success: true,
+    };
+  } catch (fetchErr: any) {
+    const isConnectionRefused = fetchErr?.code === 'ECONNREFUSED' || fetchErr?.cause?.code === 'ECONNREFUSED';
+    const isAbort = fetchErr?.name === 'AbortError';
+
+    if (!fallbackOnAnyError && !isConnectionRefused && !isAbort) {
+      throw fetchErr;
+    }
+
+    console.warn(
+      `[Format] Falling back to Python after REST failure (${isAbort ? 'timeout' : fetchErr?.message || 'unknown error'})`
+    );
+  }
+
+  const { spawn } = await import('child_process');
+  const ACESTEP_DIR = resolveAceStepPath();
+  const routeFile = fileURLToPath(import.meta.url);
+  const routeDir = path.dirname(routeFile);
+  const SCRIPTS_DIR = path.join(routeDir, '../../scripts');
+  const FORMAT_SCRIPT = path.join(SCRIPTS_DIR, 'format_sample.py');
+  const pythonPath = resolvePythonPath(ACESTEP_DIR);
+
+  const args = [FORMAT_SCRIPT, '--caption', caption, '--json'];
+  if (lyrics) args.push('--lyrics', lyrics);
+  if (bpm && bpm > 0) args.push('--bpm', String(bpm));
+  if (duration && duration > 0) args.push('--duration', String(duration));
+  if (keyScale) args.push('--key-scale', keyScale);
+  if (timeSignature) args.push('--time-signature', timeSignature);
+  if (temperature !== undefined) args.push('--temperature', String(temperature));
+  if (topK && topK > 0) args.push('--top-k', String(topK));
+  if (topP !== undefined) args.push('--top-p', String(topP));
+  if (lmModel) args.push('--lm-model', lmModel);
+  if (lmBackend) args.push('--lm-backend', lmBackend);
+
+  const result = await new Promise<FormatInputResult>((resolve, reject) => {
+    const proc = spawn(pythonPath, args, {
+      cwd: ACESTEP_DIR,
+      env: { ...process.env, ACESTEP_PATH: ACESTEP_DIR },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code === 0 && stdout) {
+        const lines = stdout.trim().split('\n');
+        let jsonStr = '';
+        for (let i = lines.length - 1; i >= 0; i -= 1) {
+          if (lines[i].startsWith('{')) { jsonStr = lines[i]; break; }
+        }
+        try {
+          resolve(JSON.parse(jsonStr || stdout) as FormatInputResult);
+        } catch {
+          reject(new Error('Failed to parse format result'));
+        }
+      } else {
+        reject(new Error(stderr || stdout || `Format process exited with code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => reject(err));
+  });
+
+  return result;
+}
+
 router.post('/upload-audio', authMiddleware, (req: AuthenticatedRequest, res: Response, next: Function) => {
   audioUpload.single('audio')(req, res, (err: any) => {
     if (err) {
@@ -374,6 +756,10 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       vaeModel,
     } = req.body as GenerateBody;
 
+    let resolvedTitle = title;
+    let resolvedTitleSource: TitleSource = title?.trim() ? 'manual' : 'rule';
+    let resolvedTitleCandidate = '';
+
     if (!customMode && !songDescription) {
       res.status(400).json({ error: 'Song description required for simple mode' });
       return;
@@ -385,12 +771,33 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
     }
 
     const isCustomMode = Boolean(customMode);
+
+    if (!resolvedTitle?.trim()) {
+      resolvedTitle = autoTitle({
+        title,
+        lyrics,
+        style,
+        songDescription,
+        instrumental,
+      });
+      resolvedTitleSource = 'rule';
+      resolvedTitleCandidate = resolvedTitle;
+    }
+
     const params = {
       customMode,
       songDescription,
       lyrics: isCustomMode ? lyrics : '',
       style: isCustomMode ? style : '',
-      title,
+      title: resolvedTitle,
+      titleSource: resolvedTitleSource,
+      titleCandidate: resolvedTitleCandidate || resolvedTitle,
+      titleGeneration: {
+        source: resolvedTitleSource,
+        usedLm: false,
+        thinking: Boolean(isCustomMode ? thinking : false),
+        usedRuleFallback: true,
+      },
       instrumental: isCustomMode ? instrumental : true,
       vocalLanguage: isCustomMode ? vocalLanguage : 'unknown',
       duration: isCustomMode ? duration : -1,
@@ -602,6 +1009,7 @@ router.get('/status/:jobId', authMiddleware, async (req: AuthenticatedRequest, r
                     JSON.stringify(songGenerationParams),
                   ]
                 );
+
                 localPaths.push(audioUrl);
               }
             }

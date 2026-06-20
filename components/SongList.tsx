@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Song } from '../types';
-import { Play, MoreHorizontal, Heart, Pause, Search, Filter, Check, Globe, Lock, Loader2, ThumbsUp, Info, Clock, BarChart3, X, Mic2 } from 'lucide-react';
+import { Play, MoreHorizontal, Star, Pause, Search, Filter, Check, Globe, Lock, Loader2, Info, Clock, BarChart3, X, Mic2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
@@ -276,7 +276,7 @@ export const SongList: React.FC<SongListProps> = ({
     }, [onLoadMore]);
 
     const FILTERS: { id: FilterType; label: string; icon: React.ReactNode }[] = [
-        { id: 'liked', label: t('liked'), icon: <ThumbsUp size={16} /> },
+        { id: 'liked', label: t('liked'), icon: <Star size={16} /> },
         { id: 'public', label: t('public'), icon: <Globe size={16} /> },
         { id: 'private', label: t('private'), icon: <Lock size={16} /> },
         { id: 'generating', label: t('generatingStatus'), icon: <Loader2 size={16} /> }
@@ -918,12 +918,9 @@ const SongItem: React.FC<SongItemProps> = ({
                     <button
                         className={`flex cursor-pointer items-center gap-1 px-2.5 py-2 rounded-full transition-all ${isLiked ? 'opacity-100 text-[#6f8f72] dark:text-[#a8c9a4] bg-[#9bb89d]/15 dark:bg-[#9bb89d]/10' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-zinc-400 hover:bg-zinc-200 hover:text-black dark:hover:bg-white/5 dark:hover:text-white'}`}
                         onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
-                        aria-label={isLiked ? 'Unlike song' : 'Like song'}
+                        aria-label={isLiked ? 'Remove from favorites' : 'Add to favorites'}
                     >
-                        <ThumbsUp size={16} fill={isLiked ? "currentColor" : "none"} />
-                        {(song.likeCount || 0) > 0 && (
-                            <span className="text-xs font-bold">{song.likeCount}</span>
-                        )}
+                        <Star size={16} fill={isLiked ? "currentColor" : "none"} />
                     </button>
 
                     {scoreRequested && (

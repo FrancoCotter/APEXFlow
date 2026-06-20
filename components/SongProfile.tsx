@@ -3,7 +3,7 @@ import { Song } from '../types';
 import { songsApi, getAudioUrl, getCoverUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
-import { ArrowLeft, Heart, MoreHorizontal, ThumbsDown, Music as MusicIcon, Edit3, Eye, Quote } from 'lucide-react';
+import { ArrowLeft, Star, MoreHorizontal, ThumbsDown, Music as MusicIcon, Edit3, Eye, Quote } from 'lucide-react';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
@@ -137,7 +137,7 @@ const updateMetaTags = (song: Song) => {
     const baseUrl = window.location.origin;
     const songUrl = `${baseUrl}/song/${song.id}`;
     const title = `${song.title} by ${song.creator || 'Unknown Artist'} | APEXFlow`;
-    const description = `Listen to "${song.title}" - ${song.style}. ${song.viewCount || 0} plays, ${song.likeCount || 0} likes. Create your own AI music with APEXFlow.`;
+    const description = `Listen to "${song.title}" - ${song.style}. ${song.viewCount || 0} plays, ${song.likeCount || 0} favorites. Create your own AI music with APEXFlow.`;
 
     document.title = title;
 

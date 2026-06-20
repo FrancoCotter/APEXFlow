@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Play, Pause, Heart, ChevronRight, ChevronLeft, Copy, Check, X, Loader2 } from 'lucide-react';
+import { Search, Play, Pause, Star, ChevronRight, ChevronLeft, Copy, Check, X, Loader2 } from 'lucide-react';
 import { Song, Playlist } from '../types';
 import { songsApi, usersApi, playlistsApi, searchApi, UserProfile, getAudioUrl, getCoverUrl } from '../services/api';
 import { useI18n } from '../context/I18nContext';
@@ -578,7 +578,7 @@ const FeaturedSongCard: React.FC<FeaturedSongCardProps> = ({
             <Play size={9} /> {formatNumber(song.viewCount)}
           </span>
           <span className="flex items-center gap-0.5 flex-shrink-0">
-            <Heart size={9} /> {formatNumber(song.likeCount)}
+            <Star size={9} /> {formatNumber(song.likeCount)}
           </span>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Song } from '../types';
-import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, Download, Heart, MoreVertical, Volume2, VolumeX, Maximize2, Repeat1, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, Download, Star, MoreVertical, Volume2, VolumeX, Maximize2, Repeat1, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useResponsive } from '../context/ResponsiveContext';
 import { useI18n } from '../context/I18nContext';
@@ -1056,7 +1056,7 @@ export const Player: React.FC<PlayerProps> = ({
                                 onClick={onToggleLike}
                                 className={`p-2 tap-highlight-none ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-400 dark:text-white/50'}`}
                             >
-                                <Heart size={24} fill={isLiked ? "currentColor" : "none"} />
+                                <Star size={24} fill={isLiked ? "currentColor" : "none"} />
                             </button>
                         </div>
                     </div>
@@ -1229,7 +1229,7 @@ export const Player: React.FC<PlayerProps> = ({
                             onClick={onToggleLike}
                             className={`p-2 tap-highlight-none ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-400'}`}
                         >
-                            <Heart size={20} fill={isLiked ? "currentColor" : "none"} />
+                            <Star size={20} fill={isLiked ? "currentColor" : "none"} />
                         </button>
                         <button
                             onClick={onPrevious}
@@ -1445,7 +1445,7 @@ export const Player: React.FC<PlayerProps> = ({
                                 onClick={onToggleLike}
                                 className={`ml-1 sm:ml-2 hidden flex-shrink-0 transition-colors sm:block ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-500 hover:text-zinc-950 dark:text-zinc-400 dark:hover:text-white'}`}
                             >
-                                <Heart size={18} fill={isLiked ? "currentColor" : "none"} />
+                                <Star size={18} fill={isLiked ? "currentColor" : "none"} />
                             </button>
                         </div>
 
@@ -1647,7 +1647,7 @@ export const Player: React.FC<PlayerProps> = ({
                         onClick={onToggleLike}
                         className={`ml-1 sm:ml-2 transition-colors flex-shrink-0 hidden sm:block ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}
                     >
-                        <Heart size={18} fill={isLiked ? "currentColor" : "none"} />
+                        <Star size={18} fill={isLiked ? "currentColor" : "none"} />
                     </button>
                 </div>
 

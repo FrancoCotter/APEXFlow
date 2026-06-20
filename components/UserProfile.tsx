@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Song, Playlist } from '../types';
 import { usersApi, getAudioUrl, getCoverUrl, UserProfile as UserProfileType, SubjectDetection, songsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ArrowLeft, Play, Pause, Heart, Music as MusicIcon, ChevronRight, Edit3, X, Camera, Image as ImageIcon, Upload, Loader2, Info } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Star, Music as MusicIcon, ChevronRight, Edit3, X, Camera, Image as ImageIcon, Upload, Loader2, Info } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { getAvatarUrl } from '../utils/avatar';
 
@@ -792,7 +792,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                             <h3 className={`font-semibold truncate text-sm md:text-base ${isCurrentSong ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-900 dark:text-white'}`}>{song.title}</h3>
                                             <p className="text-xs md:text-sm text-zinc-500 dark:text-zinc-400 truncate">{song.style}</p>
                                             <div className="flex items-center gap-3 text-xs text-zinc-500 mt-1">
-                                                <span className="flex items-center gap-1"><Heart size={10} className={isLiked ? 'fill-[#8fb68f] text-[#6f8f72] dark:text-[#a8c9a4]' : ''} /> {song.likeCount || 0}</span>
+                                                <span className="flex items-center gap-1"><Star size={10} className={isLiked ? 'fill-[#8fb68f] text-[#6f8f72] dark:text-[#a8c9a4]' : ''} /> {song.likeCount || 0}</span>
                                                 <span className="flex items-center gap-1"><Play size={10} /> {song.viewCount || 0}</span>
                                                 <span>{song.duration}</span>
                                             </div>
@@ -802,7 +802,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                                 onClick={(e) => { e.stopPropagation(); onToggleLike(song.id); }}
                                                 className={`p-2 rounded-full transition-colors flex-shrink-0 ${isLiked ? 'text-[#6f8f72] dark:text-[#a8c9a4]' : 'text-zinc-400 hover:text-[#6f8f72] dark:hover:text-[#a8c9a4]'}`}
                                             >
-                                                <Heart size={18} className={isLiked ? 'fill-current' : ''} />
+                                                <Star size={18} className={isLiked ? 'fill-current' : ''} />
                                             </button>
                                         )}
                                     </div>
@@ -926,7 +926,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                             <span className="text-sm font-bold uppercase tracking-wide text-white/55">{t('songs')}</span>
                                         </span>
                                         <span className="inline-flex items-center gap-2 text-lg font-semibold">
-                                            <Heart size={20} className="text-white/75" />
+                                            <Star size={20} className="text-white/75" />
                                             <span>{totalLikes}</span>
                                             <span className="text-sm font-bold uppercase tracking-wide text-white/55">{t('likes')}</span>
                                         </span>
