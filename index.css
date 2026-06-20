@@ -84,6 +84,149 @@ html.theme-switching *::after {
   animation: music-bar-bounce 720ms ease-in-out infinite;
 }
 
+@keyframes generating-core-pulse {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.82;
+    box-shadow: 0 0 0 0 rgba(168, 201, 164, 0.24);
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+    box-shadow: 0 0 0 0.4rem rgba(168, 201, 164, 0.08);
+  }
+}
+
+@keyframes generating-halo-breathe {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.28;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.52;
+  }
+}
+
+@keyframes generating-orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes generating-ring-glow {
+  0%, 100% {
+    opacity: 0.38;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}
+
+.generating-indicator {
+  --indicator-size: 2rem;
+  --indicator-core-size: 28%;
+  --indicator-ring-size: 74%;
+  --indicator-particle-size: 12%;
+  --indicator-color: #a8c9a4;
+  position: relative;
+  width: var(--indicator-size);
+  height: var(--indicator-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.generating-indicator--sm {
+  --indicator-size: 1.75rem;
+}
+
+.generating-indicator--md {
+  --indicator-size: 2.5rem;
+}
+
+.generating-indicator--lg {
+  --indicator-size: 4.5rem;
+}
+
+.generating-indicator__halo,
+.generating-indicator__ring,
+.generating-indicator__core,
+.generating-indicator__orbit,
+.generating-indicator__particle {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+}
+
+.generating-indicator__halo {
+  inset: 10%;
+  /* background: radial-gradient(circle, rgba(168, 201, 164, 0.34) 0%, rgba(168, 201, 164, 0.08) 46%, transparent 72%); */
+  background: rgba(168, 201, 164, 0.08);
+  /* filter: blur(0.3rem); */
+  animation: generating-halo-breathe 1.8s ease-in-out infinite;
+}
+
+.generating-indicator__ring {
+  inset: calc((100% - var(--indicator-ring-size)) / 2);
+  border: 1px solid rgba(168, 201, 164, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: generating-ring-glow 1.6s ease-in-out infinite;
+}
+
+.generating-indicator__core {
+  inset: calc((100% - var(--indicator-core-size)) / 2);
+  /* background: radial-gradient(circle at 35% 35%, #edf7ea 0%, var(--indicator-color) 42%, #6f8f72 100%); */
+  background: var(--indicator-color);
+  animation: generating-core-pulse 1.4s ease-in-out infinite;
+}
+
+.generating-indicator__orbit {
+  animation: generating-orbit-spin 2.6s linear infinite;
+}
+
+.generating-indicator__orbit--inner {
+  inset: 13%;
+  animation-direction: reverse;
+  animation-duration: 1.9s;
+}
+
+.generating-indicator__particle {
+  width: var(--indicator-particle-size);
+  height: var(--indicator-particle-size);
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  margin-left: calc(var(--indicator-particle-size) / -2);
+  margin-top: calc(var(--indicator-particle-size) / -2);
+  /* background: linear-gradient(180deg, #f3fbf0 0%, var(--indicator-color) 100%);
+  box-shadow: 0 0 0.7rem rgba(168, 201, 164, 0.32); */
+  background: var(--indicator-color);
+}
+
+.generating-indicator__particle--1 {
+  transform: translate(-50%, calc(var(--indicator-size) * -0.34));
+}
+
+.generating-indicator__particle--2 {
+  transform: translate(calc(var(--indicator-size) * 0.34 - 50%), 0);
+}
+
+.generating-indicator__particle--3 {
+  transform: translate(calc(var(--indicator-size) * -0.22 - 50%), 0);
+  opacity: 0.72;
+}
+
+.generating-indicator__particle--4 {
+  transform: translate(-50%, calc(var(--indicator-size) * 0.22));
+  opacity: 0.72;
+}
+
 .caption-clamp {
   display: -webkit-box;
   -webkit-line-clamp: var(--caption-lines, 3);
@@ -191,7 +334,11 @@ html.theme-switching *::after {
 @media (prefers-reduced-motion: reduce) {
   .now-playing-slide-next,
   .now-playing-slide-previous,
-  .music-bar-anim {
+  .music-bar-anim,
+  .generating-indicator__halo,
+  .generating-indicator__ring,
+  .generating-indicator__core,
+  .generating-indicator__orbit {
     animation: none;
   }
 }

@@ -504,6 +504,32 @@ type FormatInputResult = {
   success?: boolean;
 };
 
+type CreateSampleInputParams = {
+  query: string;
+  instrumental?: boolean;
+  vocalLanguage?: string;
+  temperature?: number;
+  topK?: number;
+  topP?: number;
+  lmModel?: string;
+  lmBackend?: string;
+  timeoutMs?: number;
+  fallbackOnAnyError?: boolean;
+};
+
+type CreateSampleInputResult = {
+  caption?: string;
+  lyrics?: string;
+  bpm?: number;
+  duration?: number;
+  key_scale?: string;
+  vocal_language?: string;
+  time_signature?: string;
+  instrumental?: boolean;
+  status_message?: string;
+  success?: boolean;
+};
+
 type TitleSource = 'manual' | 'rule';
 
 type TitleGenerationMeta = {
@@ -578,7 +604,7 @@ async function requestFormattedInput({
     }
 
     console.warn(
-      `[Format] Falling back to Python after REST failure (${isAbort ? 'timeout' : fetchErr?.message || 'unknown error'})`
+      `[Format] REST format endpoint unavailable, continuing with local Python format pipeline (${isAbort ? 'timeout' : fetchErr?.message || 'unknown error'})`
     );
   }
 
@@ -628,6 +654,117 @@ async function requestFormattedInput({
         }
       } else {
         reject(new Error(stderr || stdout || `Format process exited with code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => reject(err));
+  });
+
+  return result;
+}
+
+async function requestCreateSampleInput({
+  query,
+  instrumental,
+  vocalLanguage,
+  temperature,
+  topK,
+  topP,
+  lmModel,
+  lmBackend,
+  timeoutMs = 300_000,
+  fallbackOnAnyError = false,
+}: CreateSampleInputParams): Promise<CreateSampleInputResult> {
+  const ACESTEP_API_URL = config.acestep.apiUrl;
+
+  try {
+    const apiRes = await fetch(`${ACESTEP_API_URL}/v1/create_sample`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        instrumental: Boolean(instrumental),
+        vocal_language: vocalLanguage || 'unknown',
+        temperature: temperature ?? 0.85,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    const apiData = await apiRes.json() as any;
+    if (!apiRes.ok || apiData.code !== 200) {
+      const errMsg = apiData.error || apiData.detail || `Create sample API returned ${apiRes.status}`;
+      throw new Error(errMsg);
+    }
+
+    const d = apiData.data || {};
+    return {
+      caption: d.caption,
+      lyrics: d.lyrics,
+      bpm: d.bpm,
+      duration: d.duration,
+      key_scale: d.key_scale || d.keyscale,
+      time_signature: d.time_signature || d.timesignature,
+      vocal_language: d.vocal_language,
+      instrumental: d.instrumental,
+      status_message: d.status_message,
+      success: true,
+    };
+  } catch (fetchErr: any) {
+    const isConnectionRefused = fetchErr?.code === 'ECONNREFUSED' || fetchErr?.cause?.code === 'ECONNREFUSED';
+    const isAbort = fetchErr?.name === 'AbortError';
+
+    if (!fallbackOnAnyError && !isConnectionRefused && !isAbort) {
+      throw fetchErr;
+    }
+
+    console.warn(
+      `[CreateSample] REST sample endpoint unavailable, continuing with local Python simple-mode pipeline (${isAbort ? 'timeout' : fetchErr?.message || 'unknown error'})`
+    );
+  }
+
+  const { spawn } = await import('child_process');
+  const ACESTEP_DIR = resolveAceStepPath();
+  const routeFile = fileURLToPath(import.meta.url);
+  const routeDir = path.dirname(routeFile);
+  const SCRIPTS_DIR = path.join(routeDir, '../../scripts');
+  const CREATE_SAMPLE_SCRIPT = path.join(SCRIPTS_DIR, 'create_sample.py');
+  const pythonPath = resolvePythonPath(ACESTEP_DIR);
+
+  const args = [CREATE_SAMPLE_SCRIPT, '--query', query, '--json'];
+  if (instrumental) args.push('--instrumental');
+  if (vocalLanguage) args.push('--vocal-language', vocalLanguage);
+  if (temperature !== undefined) args.push('--temperature', String(temperature));
+  if (topK && topK > 0) args.push('--top-k', String(topK));
+  if (topP !== undefined) args.push('--top-p', String(topP));
+  if (lmModel) args.push('--lm-model', lmModel);
+  if (lmBackend) args.push('--lm-backend', lmBackend);
+
+  const result = await new Promise<CreateSampleInputResult>((resolve, reject) => {
+    const proc = spawn(pythonPath, args, {
+      cwd: ACESTEP_DIR,
+      env: { ...process.env, ACESTEP_PATH: ACESTEP_DIR },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code === 0 && stdout) {
+        const lines = stdout.trim().split('\n');
+        let jsonStr = '';
+        for (let i = lines.length - 1; i >= 0; i -= 1) {
+          if (lines[i].startsWith('{')) { jsonStr = lines[i]; break; }
+        }
+        try {
+          resolve(JSON.parse(jsonStr || stdout) as CreateSampleInputResult);
+        } catch {
+          reject(new Error('Failed to parse create sample result'));
+        }
+      } else {
+        reject(new Error(stderr || stdout || `Create sample process exited with code ${code}`));
       }
     });
 
@@ -756,10 +893,6 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       vaeModel,
     } = req.body as GenerateBody;
 
-    let resolvedTitle = title;
-    let resolvedTitleSource: TitleSource = title?.trim() ? 'manual' : 'rule';
-    let resolvedTitleCandidate = '';
-
     if (!customMode && !songDescription) {
       res.status(400).json({ error: 'Song description required for simple mode' });
       return;
@@ -771,45 +904,93 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
     }
 
     const isCustomMode = Boolean(customMode);
+    const simpleModeUsesLmPlanning = !isCustomMode;
+    const effectiveThinking = isCustomMode ? Boolean(thinking) : true;
+    let effectiveStyle = style;
+    let effectiveLyrics = lyrics;
+    let effectiveInstrumental = Boolean(instrumental);
+    let effectiveVocalLanguage = vocalLanguage || 'unknown';
+    let effectiveDuration = duration;
+    let effectiveBpm = bpm;
+    let effectiveKeyScale = keyScale;
+    let effectiveTimeSignature = timeSignature;
+    let formattedTitle = title;
+    let formatUsedLm = false;
+
+    if (simpleModeUsesLmPlanning) {
+      const createdSample = await requestCreateSampleInput({
+        query: songDescription || '',
+        instrumental: effectiveInstrumental,
+        vocalLanguage,
+        temperature: lmTemperature,
+        topK: lmTopK,
+        topP: lmTopP,
+        lmModel,
+        lmBackend,
+        fallbackOnAnyError: true,
+      });
+
+      formatUsedLm = Boolean(createdSample.success);
+      effectiveInstrumental = Boolean(createdSample.instrumental ?? effectiveInstrumental);
+      effectiveStyle = createdSample.caption?.trim() || songDescription || '';
+      effectiveLyrics = effectiveInstrumental ? '' : (createdSample.lyrics?.trim() || '');
+      effectiveDuration = createdSample.duration ?? duration;
+      effectiveBpm = createdSample.bpm ?? bpm;
+      effectiveKeyScale = createdSample.key_scale || keyScale;
+      effectiveTimeSignature = createdSample.time_signature || timeSignature;
+      effectiveVocalLanguage = createdSample.vocal_language || vocalLanguage || 'unknown';
+      formattedTitle = title;
+
+      if (!effectiveInstrumental && !effectiveLyrics) {
+        res.status(500).json({ error: 'Simple mode LM sample creation did not generate lyrics. Try again or switch to custom mode.' });
+        return;
+      }
+    }
+
+    let resolvedTitle = formattedTitle;
+    let resolvedTitleSource: TitleSource = resolvedTitle?.trim() ? 'manual' : 'rule';
+    let resolvedTitleCandidate = '';
 
     if (!resolvedTitle?.trim()) {
       resolvedTitle = autoTitle({
-        title,
-        lyrics,
-        style,
+        title: formattedTitle,
+        lyrics: effectiveLyrics,
+        style: effectiveStyle,
         songDescription,
-        instrumental,
+        instrumental: effectiveInstrumental,
       });
       resolvedTitleSource = 'rule';
       resolvedTitleCandidate = resolvedTitle;
     }
 
+    const executionCustomMode = isCustomMode || simpleModeUsesLmPlanning;
     const params = {
-      customMode,
+      customMode: executionCustomMode,
       songDescription,
-      lyrics: isCustomMode ? lyrics : '',
-      style: isCustomMode ? style : '',
+      lyrics: executionCustomMode ? effectiveLyrics : '',
+      style: executionCustomMode ? effectiveStyle : '',
       title: resolvedTitle,
       titleSource: resolvedTitleSource,
       titleCandidate: resolvedTitleCandidate || resolvedTitle,
       titleGeneration: {
         source: resolvedTitleSource,
-        usedLm: false,
-        thinking: Boolean(isCustomMode ? thinking : false),
-        usedRuleFallback: true,
+        usedLm: formatUsedLm,
+        lmModel: lmModel || undefined,
+        thinking: effectiveThinking,
+        usedRuleFallback: resolvedTitleSource === 'rule',
       },
-      instrumental: isCustomMode ? instrumental : true,
-      vocalLanguage: isCustomMode ? vocalLanguage : 'unknown',
-      duration: isCustomMode ? duration : -1,
-      bpm: isCustomMode ? bpm : 0,
-      keyScale: isCustomMode ? keyScale : '',
-      timeSignature: isCustomMode ? timeSignature : '',
+      instrumental: effectiveInstrumental,
+      vocalLanguage: effectiveVocalLanguage,
+      duration: effectiveDuration,
+      bpm: effectiveBpm,
+      keyScale: effectiveKeyScale,
+      timeSignature: effectiveTimeSignature,
       inferenceSteps,
       guidanceScale,
       batchSize,
       randomSeed,
       seed,
-      thinking: isCustomMode ? thinking : false,
+      thinking: effectiveThinking,
       audioFormat,
       inferMethod,
       shift,
@@ -834,10 +1015,10 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       cfgIntervalStart,
       cfgIntervalEnd,
       customTimesteps,
-      useCotMetas,
-      useCotCaption,
-      useCotLanguage,
-      autogen,
+      useCotMetas: simpleModeUsesLmPlanning ? useCotMetas ?? true : useCotMetas,
+      useCotCaption: simpleModeUsesLmPlanning ? useCotCaption ?? true : useCotCaption,
+      useCotLanguage: simpleModeUsesLmPlanning ? useCotLanguage ?? true : useCotLanguage,
+      autogen: simpleModeUsesLmPlanning ? true : autogen,
       constrainedDecodingDebug,
       allowLmBatch,
       getScores,
@@ -846,7 +1027,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       lmBatchChunkSize,
       trackName,
       completeTrackClasses,
-      isFormatCaption,
+      isFormatCaption: simpleModeUsesLmPlanning ? true : isFormatCaption,
       ditModel,
       dcwEnabled,
       dcwMode,
@@ -1411,7 +1592,7 @@ router.post('/format', authMiddleware, async (req: AuthenticatedRequest, res: Re
     } catch (fetchErr: any) {
       // Only fall back to Python spawn on network errors (service not yet reachable)
       if (fetchErr?.name !== 'AbortError' && (fetchErr?.code === 'ECONNREFUSED' || fetchErr?.cause?.code === 'ECONNREFUSED')) {
-        console.warn('[Format] REST API unreachable, falling back to Python spawn');
+        console.warn('[Format] REST format endpoint unavailable, continuing with local Python format pipeline');
       } else {
         console.error('[Format] REST API request failed:', fetchErr?.message);
         res.status(500).json({ success: false, error: fetchErr?.message || 'Format request failed' });
@@ -1441,7 +1622,7 @@ router.post('/format', authMiddleware, async (req: AuthenticatedRequest, res: Re
     if (lmModel) args.push('--lm-model', lmModel);
     if (lmBackend) args.push('--lm-backend', lmBackend);
 
-    console.log(`[Format] Fallback spawn: ${pythonPath} ${args.join(' ')}`);
+    console.log(`[Format] Local Python format pipeline: ${pythonPath} ${args.join(' ')}`);
     const result = await new Promise<{ success: boolean; data?: any; error?: string }>((resolve) => {
       const proc = spawn(pythonPath, args, {
         cwd: ACESTEP_DIR,

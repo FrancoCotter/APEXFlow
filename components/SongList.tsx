@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { AlbumCover } from './AlbumCover';
+import { GeneratingIndicator } from './GeneratingIndicator';
 import { songsApi } from '../services/api';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
@@ -813,13 +814,7 @@ const SongItem: React.FC<SongItemProps> = ({
                                 <span className="text-[10px] font-medium text-amber-400">Queue #{song.queuePosition}</span>
                             </>
                         ) : (
-                            /* Generating - Music Waveform Animation */
-                            <div className="flex items-end gap-1 h-6">
-                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.0s' }}></div>
-                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.2s' }}></div>
-                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.4s' }}></div>
-                                <div className="w-1 bg-[#8fb68f] rounded-full music-bar-anim" style={{ animationDelay: '0.1s' }}></div>
-                            </div>
+                            <GeneratingIndicator size="sm" />
                         )}
                     </div>
                 ) : (

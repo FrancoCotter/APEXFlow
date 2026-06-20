@@ -150,10 +150,12 @@ async function buildGradioArgs(params: GenerationParams): Promise<unknown[]> {
   const caption = params.style || 'pop music';
   const prompt = params.customMode ? caption : (params.songDescription || caption);
   const lyrics = params.instrumental ? '' : (params.lyrics || '');
+  const simpleModeUsesLmPlanning = !params.customMode;
   
   // Enable thinking
   const isThinking = params.thinking ?? false;
   const isEnhance = params.enhance ?? false;
+  const effectiveThinking = isThinking || simpleModeUsesLmPlanning;
 
   // Data pre-cleaning and type safety validation
   let cleanTopK = 0;
@@ -181,7 +183,7 @@ async function buildGradioArgs(params: GenerationParams): Promise<unknown[]> {
     throw new Error(`Source audio file could not be loaded...`);
   }
 
-  const useCot = isEnhance || isThinking;
+  const useCot = isEnhance || effectiveThinking;
 
   // Complete raw positional arguments array aligned exactly with the 78 inputs of generation_wrapper in generation_run_wiring.py
   const rawArgs = [
@@ -217,15 +219,15 @@ async function buildGradioArgs(params: GenerationParams): Promise<unknown[]> {
     0.0,                                                          // 29: velocity_ema_factor
     params.dcwEnabled ?? true,                                    // 30: dcw_enabled
     params.dcwMode || 'double',                                   // 31: dcw_mode
-    params.dcwScaler !== undefined ? params.dcwScaler : (isThinking ? 0.02 : 0.05), // 32: dcw_scaler
-    params.dcwHighScaler !== undefined ? params.dcwHighScaler : (isThinking ? 0.06 : 0.02), // 33: dcw_high_scaler
+    params.dcwScaler !== undefined ? params.dcwScaler : (effectiveThinking ? 0.02 : 0.05), // 32: dcw_scaler
+    params.dcwHighScaler !== undefined ? params.dcwHighScaler : (effectiveThinking ? 0.06 : 0.02), // 33: dcw_high_scaler
     params.dcwWavelet || 'haar',                                  // 34: dcw_wavelet
     params.customTimesteps || '',                                 // 35: custom_timesteps
     params.audioFormat || 'mp3',                                  // 36: audio_format
     '128k',                                                       // 37: mp3_bitrate
     48000,                                                        // 38: mp3_sample_rate
     cleanTemperature,                                             // 39: lm_temperature
-    isThinking,                                                   // 40: think_checkbox
+    effectiveThinking,                                            // 40: think_checkbox
     cleanLmCfg,                                                   // 41: lm_cfg_scale
     cleanTopK,                                                    // 42: lm_top_k
     cleanTopP,                                                    // 43: lm_top_p
@@ -1035,8 +1037,10 @@ async function processGenerationViaPython(
   const caption = params.style || 'pop music';
   const prompt = params.customMode ? caption : (params.songDescription || caption);
   const lyrics = params.instrumental ? '' : (params.lyrics || '');
+  const simpleModeUsesLmPlanning = !params.customMode;
+  const effectiveThinking = (params.thinking ?? false) || simpleModeUsesLmPlanning;
 
-  console.log(`Job ${jobId}: Using Python spawn (Gradio not available)`, {
+  console.log(`Job ${jobId}: Using local Python generation pipeline`, {
     prompt: prompt.slice(0, 50),
     lyricsPreview: lyrics.slice(0, 50),
     duration: params.duration,
@@ -1086,7 +1090,7 @@ async function processGenerationViaPython(
       args.push('--audio-cover-strength', String(params.audioCoverStrength));
     }
     if (params.instruction) args.push('--instruction', params.instruction);
-    if (params.thinking) args.push('--thinking');
+    if (effectiveThinking) args.push('--thinking');
     if (params.getLrc) args.push('--get-lrc');
     if (params.getScores) args.push('--get-scores', '--score-scale', String(params.scoreScale ?? 0.5));
     if (params.lmTemperature !== undefined) args.push('--lm-temperature', String(params.lmTemperature));
@@ -1104,7 +1108,7 @@ async function processGenerationViaPython(
     if (params.lmBackend) args.push('--lm-backend', params.lmBackend);
     if (params.ditModel) args.push('--dit-model', params.ditModel);
 
-    const useCot = (params.enhance ?? false) || (params.thinking ?? false);
+    const useCot = simpleModeUsesLmPlanning || (params.enhance ?? false) || (params.thinking ?? false);
     if (!useCot) {
       args.push('--no-cot-metas');
       args.push('--no-cot-caption');

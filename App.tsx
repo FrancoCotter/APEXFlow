@@ -1214,6 +1214,10 @@ function AppContent() {
     setCurrentView('create');
     setMobileShowList(false);
 
+    const initialGenerationStage = !params.customMode
+      ? (params.instrumental ? 'Creating arrangement sample...' : 'Creating lyrics sample...')
+      : 'Submitting job...';
+
     // Create unique temp ID for this job
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const tempSong: Song = {
@@ -1226,7 +1230,7 @@ function AppContent() {
       createdAt: new Date(),
       isGenerating: true,
       progress: 0.02,
-      stage: 'Submitting job...',
+      stage: initialGenerationStage,
       tags: params.customMode ? ['custom'] : ['simple'],
       isPublic: true,
       userId: user?.id,
@@ -1239,6 +1243,47 @@ function AppContent() {
     setSongs(prev => [tempSong, ...prev]);
     setSelectedSong(tempSong);
     openRightSidebar();
+
+    const preflightStageTimers: ReturnType<typeof setTimeout>[] = [];
+    if (!params.customMode) {
+      preflightStageTimers.push(setTimeout(() => {
+        setSongs(prev => prev.map(song =>
+          song.id === tempId && song.isGenerating && !song.queuePosition
+            ? {
+                ...song,
+                progress: Math.max(song.progress ?? 0, 0.05),
+                stage: params.instrumental
+                  ? 'Refining arrangement and metadata...'
+                  : 'Refining lyrics and metadata...',
+              }
+            : song
+        ));
+        setSelectedSong(current =>
+          current?.id === tempId && current.isGenerating && !current.queuePosition
+            ? {
+                ...current,
+                progress: Math.max(current.progress ?? 0, 0.05),
+                stage: params.instrumental
+                  ? 'Refining arrangement and metadata...'
+                  : 'Refining lyrics and metadata...',
+              }
+            : current
+        );
+      }, 1400));
+
+      preflightStageTimers.push(setTimeout(() => {
+        setSongs(prev => prev.map(song =>
+          song.id === tempId && song.isGenerating && !song.queuePosition
+            ? { ...song, progress: Math.max(song.progress ?? 0, 0.08), stage: 'Queueing generation job...' }
+            : song
+        ));
+        setSelectedSong(current =>
+          current?.id === tempId && current.isGenerating && !current.queuePosition
+            ? { ...current, progress: Math.max(current.progress ?? 0, 0.08), stage: 'Queueing generation job...' }
+            : current
+        );
+      }, 4200));
+    }
 
     try {
       const job = await generateApi.startGeneration({
@@ -1305,9 +1350,22 @@ function AppContent() {
         vaeModel: params.vaeModel,
       }, token);
 
+      preflightStageTimers.forEach(clearTimeout);
+      setSongs(prev => prev.map(song =>
+        song.id === tempId
+          ? { ...song, progress: Math.max(song.progress ?? 0, 0.1), stage: 'Generation job submitted...' }
+          : song
+      ));
+      setSelectedSong(current =>
+        current?.id === tempId
+          ? { ...current, progress: Math.max(current.progress ?? 0, 0.1), stage: 'Generation job submitted...' }
+          : current
+      );
+
       beginPollingJob(job.jobId, tempId);
 
     } catch (e) {
+      preflightStageTimers.forEach(clearTimeout);
       console.error('Generation error:', e);
       setSongs(prev => prev.filter(s => s.id !== tempId));
 

@@ -96,7 +96,7 @@ This fork transforms the original client into a streamlined, local-first music s
 | Area | Highlights |
 | --- | --- |
 | **Music generation** | Custom lyrics, style prompts, metadata, BPM/key/time controls, batch and bulk workflows |
-| **ACE-Step modes** | Gradio API path plus Python fallback path for local workflows |
+| **ACE-Step modes** | Gradio API path plus local Python-first generation and simple-mode sample creation |
 | **Lyrics** | Static lyrics, dynamic LRC/VTT lyrics, clickable seek, fullscreen lyric stage |
 | **Library** | Search, likes, playlists, song details, play counts, cached covers |
 | **Scores** | ACE-Step diagnostic score display when scorer output is available |
@@ -122,6 +122,7 @@ APEXFlow supports two generation backends. Each has distinct technical trade-off
 If the backend does not detect a running Gradio API server, it automatically runs Python generation by spawning a local Python subprocess.
 * **Benefits**:
   * **Smooth UI Progress Tracking**: The Express backend parses stdout/stderr lines to update precise stages (`Thinking about metadata...`, `Running diffusion...`) and smooth progress percentages in the UI.
+  * **Local Simple Mode Pipeline**: Simple mode can still create full local samples (`caption + lyrics + metadata`) through ACE-Step's Python `create_sample()` flow before generation starts, so automatic lyric writing does not depend on the REST API staying online.
   * **Auto VRAM Releasing**: The Python process exits immediately after generation, completely freeing GPU memory so you can play games, run Stable Diffusion, or use other AI tools without VRAM bottlenecks.
   * **Zero Setup**: You only need to run APEXFlow. No need to start the separate ACE-Step Gradio server process in the background.
 * **Drawbacks**:

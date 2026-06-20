@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { SongDropdownMenu } from './SongDropdownMenu';
 import { AlbumCover } from './AlbumCover';
+import { GeneratingIndicator } from './GeneratingIndicator';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
 import { hasRenderableSyncedLyrics } from '../utils/syncedLyrics';
@@ -296,14 +297,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             ) : (
                                 <AlbumCover seed={song.id || song.title} size="full" className="h-full w-full opacity-45 blur-md scale-110" />
                             )}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/10" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/25" />
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="flex items-end gap-1.5 rounded-full bg-black/25 px-5 py-4 backdrop-blur-md">
-                                    <span className="h-8 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '0ms' }} />
-                                    <span className="h-12 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '120ms' }} />
-                                    <span className="h-6 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '240ms' }} />
-                                    <span className="h-10 w-2 rounded-full bg-[#a8c9a4] animate-pulse" style={{ animationDelay: '360ms' }} />
-                                </div>
+                                <GeneratingIndicator size="lg" />
+                                
                             </div>
                             <div className="absolute bottom-4 left-4 right-4 flex items-center justify-end">
                                 <span className="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-bold text-black backdrop-blur-sm">
