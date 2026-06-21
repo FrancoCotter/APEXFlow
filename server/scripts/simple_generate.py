@@ -24,6 +24,16 @@ if not os.path.exists(env_path):
 print(f"[simple_generate] ACESTEP_PATH: '{ACESTEP_PATH}'", file=sys.stderr)
 print(f"[simple_generate] Checked env_path: '{env_path}' (exists: {os.path.exists(env_path)})", file=sys.stderr)
 
+# Force tqdm/progress bars to stay enabled when this script runs under a piped
+# subprocess. ACE-Step disables tqdm when stderr is not a TTY, which hides the
+# LM "audio codes" progress we want to mirror in the Node fallback logs.
+if os.environ.get("ACESTEP_FORCE_TQDM", "1").lower() not in {"0", "false", "no"}:
+    try:
+        sys.stderr.isatty = lambda: True  # type: ignore[method-assign]
+        sys.stdout.isatty = lambda: True  # type: ignore[method-assign]
+    except Exception:
+        pass
+
 if os.path.exists(env_path):
     try:
         with open(env_path, 'r', encoding='utf-8') as f:

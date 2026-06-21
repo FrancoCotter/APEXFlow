@@ -441,6 +441,8 @@ interface ActiveJob {
   queuePosition?: number;
   progress?: number;
   stage?: string;
+  stageBase?: string;
+  pythonRate?: string;
   progressWindow?: {
     start: number;
     end: number;
@@ -480,6 +482,7 @@ function setJobProgressWindow(
 ): void {
   const safeStart = clamp01(start);
   const safeEnd = clamp01(Math.max(end, safeStart));
+  job.stageBase = stage;
   job.stage = stage;
   job.progress = Math.max(job.progress ?? 0, safeStart);
   job.progressWindow = {
@@ -506,9 +509,69 @@ function estimateJobProgress(job: ActiveJob): number | undefined {
   return job.progress;
 }
 
+function extractPythonRate(line: string): string | undefined {
+  const secondsPerItMatch = line.match(/(\d+(?:\.\d+)?)\s*s\/(?:it|token|tok)\b/i);
+  if (secondsPerItMatch) {
+    return `${secondsPerItMatch[1]}s/it`;
+  }
+
+  const iterationsPerSecondMatch = line.match(/(\d+(?:\.\d+)?)\s*(?:it|token|tok)\/s\b/i);
+  if (iterationsPerSecondMatch) {
+    return `${iterationsPerSecondMatch[1]} it/s`;
+  }
+
+  return undefined;
+}
+
+function extractPythonProgressDetail(line: string): string | undefined {
+  const percentMatch = line.match(/(\d+)%\|/);
+  const stepMatch = line.match(/\|\s*(\d+)\/(\d+)\s*\[/);
+  const rate = extractPythonRate(line);
+
+  if (!percentMatch && !stepMatch && !rate) {
+    return undefined;
+  }
+
+  const parts: string[] = [];
+  if (percentMatch) {
+    parts.push(`${percentMatch[1]}%`);
+  }
+  if (rate) {
+    parts.push(rate);
+  }
+  if (stepMatch) {
+    parts.push(`${stepMatch[1]}/${stepMatch[2]}`);
+  }
+  return parts.join(' • ');
+}
+
+function extractPythonDisplayDetail(line: string): string | undefined {
+  const percentMatch = line.match(/(\d+)%\|/);
+  const rate = extractPythonRate(line);
+
+  if (!percentMatch && !rate) {
+    return undefined;
+  }
+
+  const percent = percentMatch ? `${percentMatch[1]}%` : undefined;
+  if (percent && rate) {
+    return `${percent} (${rate})`;
+  }
+  return percent ?? (rate ? `(${rate})` : undefined);
+}
+
+function shouldExposePythonProgressDetail(stage: string | undefined): boolean {
+  return stage === 'Generating audio codes...' || stage === 'Running diffusion...';
+}
+
 function updateJobFromPythonLog(job: ActiveJob, line: string): void {
   const normalized = line.trim();
   if (!normalized) return;
+
+  const pythonRate = extractPythonRate(normalized);
+  if (pythonRate) {
+    job.pythonRate = pythonRate;
+  }
 
   if (
     normalized.includes('[Spawn] Spawning Python command')
@@ -657,6 +720,15 @@ function updateJobFromPythonLog(job: ActiveJob, line: string): void {
   ) {
     setJobProgressWindow(job, 'Saving output files...', 0.995, 0.998, 2);
   }
+}
+
+function formatBackendLogLineForJob(job: ActiveJob | undefined, line: string): string {
+  const stage = job?.stageBase ?? job?.stage;
+  const detail = extractPythonDisplayDetail(line);
+  if (detail && shouldExposePythonProgressDetail(stage) && stage) {
+    return `[${stage}] ${detail}`;
+  }
+  return line;
 }
 
 // Periodic cleanup of old jobs (every 10 minutes, remove jobs older than 1 hour)
@@ -1135,9 +1207,13 @@ async function processGenerationViaPython(
     if (params.dcwHighScaler !== undefined) args.push('--dcw-high-scaler', String(params.dcwHighScaler));
     if (params.dcwWavelet) args.push('--dcw-wavelet', params.dcwWavelet);
     if (params.vaeModel) args.push('--vae-checkpoint', params.vaeModel);
-    const result = await runPythonGeneration(args, (line) => {
-      updateJobFromPythonLog(job, line);
-    });
+    const result = await runPythonGeneration(
+      args,
+      (line) => {
+        updateJobFromPythonLog(job, line);
+      },
+      (line) => formatBackendLogLineForJob(job, line),
+    );
 
     if (!result.success) {
       throw new Error(result.error || 'Generation failed');
@@ -1232,11 +1308,12 @@ interface PythonResult {
 function runPythonGeneration(
   scriptArgs: string[],
   onLogLine?: (line: string) => void,
+  formatLogLine?: (line: string) => string,
   timeoutMs = config.generationTimeoutMs,
 ): Promise<PythonResult> {
   return new Promise((resolve) => {
     const pythonPath = resolvePythonPath(ACESTEP_DIR);
-    const args = [PYTHON_SCRIPT, ...scriptArgs];
+    const args = ['-u', PYTHON_SCRIPT, ...scriptArgs];
 
     console.log(`[ACE-Step] [Spawn] Spawning Python command: "${pythonPath}" ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`);
     const acestepGenerationTimeoutSeconds = Math.ceil(timeoutMs / 1000);
@@ -1247,6 +1324,7 @@ function runPythonGeneration(
         ...process.env,
         ACESTEP_PATH: ACESTEP_DIR,
         ACESTEP_GENERATION_TIMEOUT: String(acestepGenerationTimeoutSeconds),
+        PYTHONUNBUFFERED: '1',
         PYTHONIOENCODING: 'utf-8',
         PYTHONUTF8: '1',
         LANG: 'C.UTF-8',
@@ -1272,11 +1350,12 @@ function runPythonGeneration(
       const chunk = data.toString();
       stderr += chunk;
       stderrBuffer += chunk;
-      const lines = stderrBuffer.split('\n');
+      const lines = stderrBuffer.split(/\r?\n|\r/g);
       stderrBuffer = lines.pop() ?? '';
       for (const line of lines) {
         if (line.trim()) {
-          console.log(`[ACE-Step] ${line}`);
+          const displayLine = formatLogLine?.(line) ?? line;
+          console.log(`[ACE-Step] ${displayLine}`);
           onLogLine?.(line);
         }
       }
@@ -1285,7 +1364,8 @@ function runPythonGeneration(
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (stderrBuffer.trim()) {
-        console.log(`[ACE-Step] ${stderrBuffer}`);
+        const displayLine = formatLogLine?.(stderrBuffer) ?? stderrBuffer;
+        console.log(`[ACE-Step] ${displayLine}`);
         onLogLine?.(stderrBuffer);
       }
       if (code !== 0) {
