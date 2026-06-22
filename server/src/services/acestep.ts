@@ -731,6 +731,10 @@ function formatBackendLogLineForJob(job: ActiveJob | undefined, line: string): s
   return line;
 }
 
+function isInlineProgressLog(line: string): boolean {
+  return line.startsWith('[Generating audio codes...]') || line.startsWith('[Running diffusion...]');
+}
+
 // Periodic cleanup of old jobs (every 10 minutes, remove jobs older than 1 hour)
 setInterval(() => cleanupOldJobs(3600000), 600000);
 
@@ -1341,6 +1345,29 @@ function runPythonGeneration(
     let stdout = '';
     let stderr = '';
     let stderrBuffer = '';
+    let activeInlineLog = false;
+    let lastInlineLogWidth = 0;
+
+    const flushInlineLog = () => {
+      if (!activeInlineLog) return;
+      process.stdout.write('\n');
+      activeInlineLog = false;
+      lastInlineLogWidth = 0;
+    };
+
+    const printLogLine = (line: string) => {
+      const message = `[ACE-Step] ${line}`;
+      if (isInlineProgressLog(line)) {
+        const paddedMessage = message.padEnd(lastInlineLogWidth, ' ');
+        process.stdout.write(`\r${paddedMessage}`);
+        activeInlineLog = true;
+        lastInlineLogWidth = Math.max(lastInlineLogWidth, message.length);
+        return;
+      }
+
+      flushInlineLog();
+      console.log(message);
+    };
 
     proc.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -1355,7 +1382,7 @@ function runPythonGeneration(
       for (const line of lines) {
         if (line.trim()) {
           const displayLine = formatLogLine?.(line) ?? line;
-          console.log(`[ACE-Step] ${displayLine}`);
+          printLogLine(displayLine);
           onLogLine?.(line);
         }
       }
@@ -1365,9 +1392,10 @@ function runPythonGeneration(
       clearTimeout(timer);
       if (stderrBuffer.trim()) {
         const displayLine = formatLogLine?.(stderrBuffer) ?? stderrBuffer;
-        console.log(`[ACE-Step] ${displayLine}`);
+        printLogLine(displayLine);
         onLogLine?.(stderrBuffer);
       }
+      flushInlineLog();
       if (code !== 0) {
         resolve({ success: false, error: stderr || `Process exited with code ${code}` });
         return;
@@ -1398,6 +1426,7 @@ function runPythonGeneration(
 
     proc.on('error', (err) => {
       clearTimeout(timer);
+      flushInlineLog();
       resolve({ success: false, error: err.message });
     });
   });
