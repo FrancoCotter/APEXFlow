@@ -699,7 +699,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                         </div>
                          {!supportsClipboardWrite && (
                                 <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                                    （*{t('clipboardUnavailableHint')}）
+                                    *{t('clipboardUnavailableHint')}
                                 </p>
                             )}
                         {songCaption && (
