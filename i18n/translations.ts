@@ -711,6 +711,7 @@ export const translations = {
     closeProfileInfo: 'Close profile info',
     creativeSummary: 'Creative Summary',
     modelsUsed: 'Models Used',
+    clipboardUnavailableHint: 'One-click copy may not be supported in this local environment. Try Reuse to refill lyrics and prompts for your next creation.',
     thisSample: 'this sample',
   },
   zh: {
@@ -1422,6 +1423,7 @@ export const translations = {
     calculatingScores: '正在计算评分...',
     savingOutputFiles: '正在保存输出文件...',
     generatingMusicViaGradio: '正在通过 Gradio 生成音乐...',
+    clipboardUnavailableHint: '本地环境可能不支持一键复制，建议使用重用功能回填歌词和提示，继续创作。',
     thisSample: '此样本',
   },
   ja: {
@@ -2133,6 +2135,7 @@ export const translations = {
     calculatingScores: 'スコアを計算中...',
     savingOutputFiles: '出力ファイルを保存中...',
     generatingMusicViaGradio: 'Gradio 経由で音楽を生成中...',
+    clipboardUnavailableHint: 'このローカル環境ではワンクリックコピーが使えない場合があります。続けて制作するには、再利用で歌詞とプロンプトを再入力してください。',
     thisSample: 'このサンプル',
   },
   ko: {
@@ -2839,6 +2842,7 @@ export const translations = {
     calculatingScores: '점수를 계산하는 중...',
     savingOutputFiles: '출력 파일을 저장하는 중...',
     generatingMusicViaGradio: 'Gradio를 통해 음악을 생성하는 중...',
+    clipboardUnavailableHint: '로컬 환경에서는 원클릭 복사가 지원되지 않을 수 있습니다. 다음 작업에는 재사용으로 가사와 프롬프트를 다시 채워 넣어 주세요.',
     thisSample: '이 샘플',
   }
 };

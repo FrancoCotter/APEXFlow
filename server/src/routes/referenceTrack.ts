@@ -8,6 +8,7 @@ import { pool } from '../db/pool.js';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 import { getStorageProvider } from '../services/storage/factory.js';
 import { spawn } from 'child_process';
+import { normalizeUploadedFilename } from '../utils/filename.js';
 
 const router = Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -139,6 +140,7 @@ router.get('/', authMiddleware, async (req: AuthenticatedRequest, res: Response)
     const storage = getStorageProvider();
     const tracks = result.rows.map(row => ({
       ...row,
+      filename: normalizeUploadedFilename(row.filename),
       audio_url: storage.getPublicUrl(row.storage_key)
     }));
 
@@ -158,7 +160,7 @@ router.post('/', authMiddleware, upload.single('audio'), async (req: Authenticat
     }
 
     const userId = req.user!.id;
-    const originalFilename = req.file.originalname;
+    const originalFilename = normalizeUploadedFilename(req.file.originalname);
     const ext = path.extname(originalFilename) || '.mp3';
     const timestamp = Date.now();
     const key = `reference-tracks/${userId}/${timestamp}${ext}`;
@@ -181,6 +183,7 @@ router.post('/', authMiddleware, upload.single('audio'), async (req: Authenticat
     res.status(201).json({
       track: {
         ...result.rows[0],
+        filename: normalizeUploadedFilename(result.rows[0].filename),
         audio_url: audioUrl
       },
       whisper_available: whisperAvailable
@@ -240,6 +243,7 @@ router.patch('/:id', authMiddleware, async (req: AuthenticatedRequest, res: Resp
     res.json({
       track: {
         ...result.rows[0],
+        filename: normalizeUploadedFilename(result.rows[0].filename),
         audio_url: storage.getPublicUrl(result.rows[0].storage_key)
       }
     });

@@ -81,6 +81,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const [isSavingTitle, setIsSavingTitle] = useState(false);
     const [now, setNow] = useState(() => Date.now());
     const [hasVerifiedDynamicLyrics, setHasVerifiedDynamicLyrics] = useState(false);
+    const supportsClipboardWrite = typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function';
     const displayViewCount = song
         ? song.viewCount ?? (song as Song & { view_count?: number }).view_count ?? 0
         : 0;
@@ -676,12 +677,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <h2 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wide">{t('songDetails')}</h2>
+                            
                             <button
                                 onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
                                         const copyText = songCaption || displayTags.join(', ');
-                                        if (!copyText) return;
+                                        if (!copyText || !supportsClipboardWrite) return;
                                         await navigator.clipboard.writeText(copyText);
                                         setCopiedStyle(true);
                                         setTimeout(() => setCopiedStyle(false), 2000);
@@ -695,8 +697,14 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 <Copy size={12} /> {copiedStyle ? t('copied') : t('copy')}
                             </button>
                         </div>
+                         {!supportsClipboardWrite && (
+                                <p className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                                    （*{t('clipboardUnavailableHint')}）
+                                </p>
+                            )}
                         {songCaption && (
                             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+                                <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{t('styleTags')}</h3>
                                 <p
                                     className={`text-sm leading-relaxed text-zinc-700 dark:text-zinc-300 ${captionExpanded ? '' : 'caption-clamp'}`}
                                     style={{ '--caption-lines': 3 } as React.CSSProperties}
@@ -749,6 +757,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 {t('noSongDetailsAvailable')}
                             </p>
                         )}
+                       
                     </div>
 
                     {/* Lyrics Section */}
@@ -759,7 +768,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 onClick={async (e) => {
                                     e.stopPropagation();
                                     try {
-                                        if (song.lyrics) {
+                                        if (song.lyrics && supportsClipboardWrite) {
                                             await navigator.clipboard.writeText(song.lyrics);
                                             setCopiedLyrics(true);
                                             setTimeout(() => setCopiedLyrics(false), 2000);
@@ -777,9 +786,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                             <div className="text-sm text-zinc-700 dark:text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed opacity-90">
                                 {song.lyrics || <div className="text-zinc-400 dark:text-zinc-600 italic text-center py-8">{t('instrumental')}<br /><span className="text-xs not-italic">{t('noLyricsGenerated')}</span></div>}
                             </div>
+                           
                         </div>
-                    </div>
-
+                    </div>      
                 </div>
             </div>
 
