@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { usersApi, UserProfile, SubjectDetection } from '../services/api';
 import { useI18n } from '../context/I18nContext';
 import { getAvatarUrl } from '../utils/avatar';
+import { deriveFocusSafeBox, getSafeCoverObjectPosition, normalizedBoxFromValues } from '../utils/coverPosition';
 
 interface EditProfileModalProps {
     isOpen: boolean;
@@ -33,13 +34,43 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
     const [uploadingBanner, setUploadingBanner] = useState(false);
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const bannerInputRef = useRef<HTMLInputElement>(null);
+    const bannerPreviewFrameRef = useRef<HTMLDivElement>(null);
     const [assetVersion, setAssetVersion] = useState(0);
+    const [bannerPreviewLayout, setBannerPreviewLayout] = useState({
+        imageWidth: 0,
+        imageHeight: 0,
+        containerWidth: 0,
+        containerHeight: 0,
+    });
 
     useEffect(() => {
         if (isOpen && user && token) {
             loadProfile();
         }
     }, [isOpen, user, token]);
+
+    useEffect(() => {
+        const frame = bannerPreviewFrameRef.current;
+        if (!frame || typeof ResizeObserver === 'undefined') return;
+
+        const syncLayout = () => {
+            setBannerPreviewLayout(prev => {
+                const nextWidth = frame.clientWidth;
+                const nextHeight = frame.clientHeight;
+                if (prev.containerWidth === nextWidth && prev.containerHeight === nextHeight) return prev;
+                return {
+                    ...prev,
+                    containerWidth: nextWidth,
+                    containerHeight: nextHeight,
+                };
+            });
+        };
+
+        syncLayout();
+        const observer = new ResizeObserver(syncLayout);
+        observer.observe(frame);
+        return () => observer.disconnect();
+    }, []);
 
     const loadProfile = async () => {
         if (!user || !token) return;
@@ -142,6 +173,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
             let nextAvatarFocusY = profile.avatar_focus_y ?? 0.5;
             let nextBannerFocusX = profile.banner_focus_x ?? 0.5;
             let nextBannerFocusY = profile.banner_focus_y ?? 0.5;
+            let nextBannerBoxX = profile.banner_box_x;
+            let nextBannerBoxY = profile.banner_box_y;
+            let nextBannerBoxWidth = profile.banner_box_width;
+            let nextBannerBoxHeight = profile.banner_box_height;
 
             if (avatarFile) {
                 setUploadingAvatar(true);
@@ -156,10 +191,21 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
 
             if (bannerFile) {
                 setUploadingBanner(true);
-                const bannerRes = await usersApi.uploadBanner(bannerFile, token, bannerSubject);
+                const bannerRes = await usersApi.uploadBanner(
+                    bannerFile,
+                    token,
+                    bannerSubject,
+                    bannerPreviewLayout.imageWidth > 0 && bannerPreviewLayout.imageHeight > 0
+                        ? { width: bannerPreviewLayout.imageWidth, height: bannerPreviewLayout.imageHeight }
+                        : null,
+                );
                 nextBannerUrl = bannerRes.url;
                 nextBannerFocusX = bannerRes.subject.focus.x;
                 nextBannerFocusY = bannerRes.subject.focus.y;
+                nextBannerBoxX = bannerRes.subject.box.x;
+                nextBannerBoxY = bannerRes.subject.box.y;
+                nextBannerBoxWidth = bannerRes.subject.box.width;
+                nextBannerBoxHeight = bannerRes.subject.box.height;
                 console.info('[face-detection] banner', bannerRes.subject);
                 setEditBannerUrl(nextBannerUrl);
                 setUploadingBanner(false);
@@ -183,6 +229,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
                 avatar_focus_y: nextAvatarFocusY,
                 banner_focus_x: nextBannerFocusX,
                 banner_focus_y: nextBannerFocusY,
+                banner_box_x: nextBannerBoxX,
+                banner_box_y: nextBannerBoxY,
+                banner_box_width: nextBannerBoxWidth,
+                banner_box_height: nextBannerBoxHeight,
             };
 
             if (Object.keys(updates).length > 0) {
@@ -215,6 +265,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
                     avatarUrl: updatedProfile.avatar_url,
                     bannerUrl: updatedProfile.banner_url,
                     version: nextVersion,
+                    profile: updatedProfile,
                 },
             }));
             handleClose();
@@ -250,7 +301,23 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
     const avatarPreviewFocus = avatarSubject ? `${avatarSubject.focus.x * 100}% ${avatarSubject.focus.y * 100}%` : 'center';
     const previewBannerX = bannerSubject?.focus.x ?? profile?.banner_focus_x ?? 0.5;
     const previewBannerY = bannerSubject?.focus.y ?? profile?.banner_focus_y ?? 0.5;
-    const bannerEditorFocus = `${previewBannerX * 100}% ${Math.max(0, previewBannerY - 0.2) * 100}%`;
+    const persistedBannerBox = normalizedBoxFromValues(
+        profile?.banner_box_x,
+        profile?.banner_box_y,
+        profile?.banner_box_width,
+        profile?.banner_box_height
+    );
+    const previewSafeBox = deriveFocusSafeBox(
+        { x: previewBannerX, y: previewBannerY },
+        bannerSubject?.box ?? persistedBannerBox,
+        { widthScale: 0.32, heightScale: 0.26, minSize: 0.14 }
+    );
+    const bannerEditorFocus = getSafeCoverObjectPosition({
+        ...bannerPreviewLayout,
+        focus: { x: previewBannerX, y: previewBannerY },
+        box: previewSafeBox ?? bannerSubject?.box ?? persistedBannerBox,
+        biasY: previewSafeBox ? -0.18 : -0.1,
+    });
 
     if (!isOpen) return null;
 
@@ -342,6 +409,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('bannerImage')}</label>
                                 <div
+                                    ref={bannerPreviewFrameRef}
                                     onClick={() => bannerInputRef.current?.click()}
                                     className="relative w-full h-32 rounded-lg bg-zinc-100 dark:bg-zinc-800 border-2 border-zinc-300 dark:border-zinc-700 border-dashed overflow-hidden cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors"
                                 >
@@ -350,6 +418,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
                                             src={bannerDisplayUrl}
                                             className="w-full h-full object-cover"
                                             style={{ objectPosition: bannerEditorFocus }}
+                                            onLoad={(e) => {
+                                                const { naturalWidth, naturalHeight } = e.currentTarget;
+                                                setBannerPreviewLayout(prev => ({
+                                                    ...prev,
+                                                    imageWidth: naturalWidth,
+                                                    imageHeight: naturalHeight,
+                                                }));
+                                            }}
                                             onError={(e) => (e.currentTarget.style.display = 'none')}
                                         />
                                     ) : (

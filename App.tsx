@@ -374,11 +374,12 @@ function AppContent() {
     };
 
     const handleProfileUpdated = (event: Event) => {
-      const { username, avatarUrl, bannerUrl, version } = (event as CustomEvent<{
+      const { username, avatarUrl, bannerUrl, version, profile } = (event as CustomEvent<{
         username?: string;
         avatarUrl?: string;
         bannerUrl?: string;
         version?: number;
+        profile?: UserProfileType;
       }>).detail || {};
       if (!username) return;
 
@@ -397,6 +398,7 @@ function AppContent() {
         prev?.username === username
           ? {
               ...prev,
+              ...profile,
               avatar_url: nextAvatarUrl ?? prev.avatar_url,
               banner_url: withVersion(bannerUrl, version) ?? prev.banner_url,
             }

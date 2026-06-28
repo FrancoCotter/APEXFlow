@@ -8,6 +8,16 @@ CREATE TABLE IF NOT EXISTS users (
   bio TEXT,
   avatar_url TEXT,
   banner_url TEXT,
+  avatar_focus_x REAL DEFAULT 0.5,
+  avatar_focus_y REAL DEFAULT 0.5,
+  banner_focus_x REAL DEFAULT 0.5,
+  banner_focus_y REAL DEFAULT 0.5,
+  banner_box_x REAL,
+  banner_box_y REAL,
+  banner_box_width REAL,
+  banner_box_height REAL,
+  banner_image_width INTEGER,
+  banner_image_height INTEGER,
   is_admin INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
@@ -147,6 +157,16 @@ function migrate(): void {
   try {
     // Execute the entire migration script at once
     db.exec(migrations);
+    const userColumns = new Set((db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>).map(column => column.name));
+    for (const column of ['avatar_focus_x', 'avatar_focus_y', 'banner_focus_x', 'banner_focus_y']) {
+      if (!userColumns.has(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} REAL DEFAULT 0.5`);
+    }
+    for (const column of ['banner_box_x', 'banner_box_y', 'banner_box_width', 'banner_box_height']) {
+      if (!userColumns.has(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} REAL`);
+    }
+    for (const column of ['banner_image_width', 'banner_image_height']) {
+      if (!userColumns.has(column)) db.exec(`ALTER TABLE users ADD COLUMN ${column} INTEGER`);
+    }
     console.log('Migrations completed successfully!');
   } catch (error) {
     // Check if it's just "already exists" errors

@@ -85,6 +85,12 @@ export interface User {
   avatar_focus_y?: number;
   banner_focus_x?: number;
   banner_focus_y?: number;
+  banner_box_x?: number;
+  banner_box_y?: number;
+  banner_box_width?: number;
+  banner_box_height?: number;
+  banner_image_width?: number;
+  banner_image_height?: number;
   createdAt?: string;
 }
 
@@ -122,6 +128,7 @@ export interface Song {
   style: string;
   caption?: string;
   cover_url?: string;
+  coverUrl?: string;
   audio_url?: string;
   audioUrl?: string;
   playbackUrl?: string;
@@ -576,10 +583,17 @@ export const usersApi = {
     return response.json();
   },
 
-  uploadBanner: async (file: File, token: string, subject?: SubjectDetection | null): Promise<{ user: UserProfile; url: string; subject: SubjectDetection }> => {
+  uploadBanner: async (
+    file: File,
+    token: string,
+    subject?: SubjectDetection | null,
+    dimensions?: { width: number; height: number } | null,
+  ): Promise<{ user: UserProfile; url: string; subject: SubjectDetection }> => {
     const formData = new FormData();
     formData.append('banner', file);
     if (subject) formData.append('subject', JSON.stringify(subject));
+    if (dimensions?.width) formData.append('imageWidth', String(dimensions.width));
+    if (dimensions?.height) formData.append('imageHeight', String(dimensions.height));
     const response = await fetch(`${API_BASE}/api/users/me/banner`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },

@@ -45,8 +45,9 @@ export async function detectSubject(buffer: Buffer): Promise<SubjectDetection> {
   for (const candidate of candidates) {
     try {
       const detection = await new Promise<SubjectDetection>((resolve, reject) => {
-        const child = spawn(candidate.command, candidate.args, { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+        const child = spawn(candidate.command, candidate.args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
         let output = '';
+        let errorOutput = '';
         let settled = false;
         const finish = (error?: unknown, value?: SubjectDetection) => {
           if (settled) return;
@@ -60,13 +61,21 @@ export async function detectSubject(buffer: Buffer): Promise<SubjectDetection> {
           finish(new Error('detector timed out'));
         }, 3_000);
         child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
         child.stdout.on('data', chunk => { output += chunk; });
+        child.stderr.on('data', chunk => { errorOutput += chunk; });
         child.on('error', finish);
         // Missing/broken Python executables can close before the image is written.
         // Always consume EPIPE/EOF here; otherwise Node treats it as an unhandled event.
         child.stdin.on('error', finish);
         child.on('close', code => {
-          if (code !== 0) return finish(new Error(`detector exited ${code}`));
+          if (code !== 0) {
+            const details = errorOutput.trim();
+            return finish(new Error(`detector exited ${code}${details ? `: ${details}` : ''}`));
+          }
+          if (errorOutput.trim()) {
+            console.info(`[face-detection] python stderr (${candidate.command}): ${errorOutput.trim()}`);
+          }
           try { finish(undefined, JSON.parse(output.trim()) as SubjectDetection); } catch (error) { finish(error); }
         });
         try {
@@ -75,13 +84,17 @@ export async function detectSubject(buffer: Buffer): Promise<SubjectDetection> {
           finish(error);
         }
       });
+      console.info(`[face-detection] python candidate ok: ${candidate.command} ${candidate.args.join(' ')}`);
       preferredCandidate = candidate;
       detectionUnavailableUntil = 0;
       return detection;
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[face-detection] python candidate failed: ${candidate.command} ${candidate.args.join(' ')} :: ${message}`);
       // Try the next common Python executable.
     }
   }
+  console.warn('[face-detection] all python candidates failed; using unavailable fallback for 60s');
   detectionUnavailableUntil = Date.now() + 60_000;
   return fallback;
 }

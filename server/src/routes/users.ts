@@ -20,7 +20,7 @@ async function resolvePublicAudioUrl(audioUrl: string | null): Promise<string | 
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
   fileFilter: (_req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (allowedTypes.includes(file.mimetype)) {
@@ -70,7 +70,9 @@ router.get('/:username', optionalAuthMiddleware, async (req: AuthenticatedReques
     try {
         const result = await pool.query(
             `SELECT u.id, u.username, u.created_at, u.bio, u.avatar_url, u.banner_url,
-                    u.avatar_focus_x, u.avatar_focus_y, u.banner_focus_x, u.banner_focus_y
+                    u.avatar_focus_x, u.avatar_focus_y, u.banner_focus_x, u.banner_focus_y,
+                    u.banner_box_x, u.banner_box_y, u.banner_box_width, u.banner_box_height,
+                    u.banner_image_width, u.banner_image_height
              FROM users u
              WHERE u.username = $1`,
             [req.params.username]
@@ -180,11 +182,22 @@ function uploadedSubject(raw: unknown) {
         const subject = JSON.parse(raw);
         const x = Number(subject?.focus?.x);
         const y = Number(subject?.focus?.y);
+        const boxX = Number(subject?.box?.x);
+        const boxY = Number(subject?.box?.y);
+        const boxWidth = Number(subject?.box?.width);
+        const boxHeight = Number(subject?.box?.height);
         if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return null;
+        if (!Number.isFinite(boxX) || !Number.isFinite(boxY) || !Number.isFinite(boxWidth) || !Number.isFinite(boxHeight)) return null;
         return subject;
     } catch {
         return null;
     }
+}
+
+function uploadedImageDimension(raw: unknown) {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return Math.round(value);
 }
 
 router.post('/me/avatar', authMiddleware, upload.single('avatar'), async (req: AuthenticatedRequest, res: Response) => {
@@ -206,7 +219,7 @@ router.post('/me/avatar', authMiddleware, upload.single('avatar'), async (req: A
 
         // Update user record
         const result = await pool.query(
-            `UPDATE users SET avatar_url = $1, avatar_focus_x = $2, avatar_focus_y = $3, updated_at = datetime('now') WHERE id = $4 RETURNING id, username, created_at, bio, avatar_url, banner_url, avatar_focus_x, avatar_focus_y, banner_focus_x, banner_focus_y`,
+            `UPDATE users SET avatar_url = $1, avatar_focus_x = $2, avatar_focus_y = $3, updated_at = datetime('now') WHERE id = $4 RETURNING id, username, created_at, bio, avatar_url, banner_url, avatar_focus_x, avatar_focus_y, banner_focus_x, banner_focus_y, banner_box_x, banner_box_y, banner_box_width, banner_box_height, banner_image_width, banner_image_height`,
             [url, subject.focus.x, subject.focus.y, userId]
         );
 
@@ -232,14 +245,28 @@ router.post('/me/banner', authMiddleware, upload.single('banner'), async (req: A
 
         const storage = getStorageProvider();
         const subject = uploadedSubject(req.body.subject) || await detectSubject(req.file.buffer);
+        const imageWidth = uploadedImageDimension(req.body.imageWidth);
+        const imageHeight = uploadedImageDimension(req.body.imageHeight);
         console.info(`[face-detection] banner: ${subject.kind}, detector=${subject.detector}, focus=${subject.focus.x.toFixed(3)},${subject.focus.y.toFixed(3)}, box=${subject.box.x.toFixed(3)},${subject.box.y.toFixed(3)},${subject.box.width.toFixed(3)},${subject.box.height.toFixed(3)}`);
         await storage.upload(key, req.file.buffer, req.file.mimetype);
         const url = storage.getPublicUrl(key);
 
         // Update user record
         const result = await pool.query(
-            `UPDATE users SET banner_url = $1, banner_focus_x = $2, banner_focus_y = $3, updated_at = datetime('now') WHERE id = $4 RETURNING id, username, created_at, bio, avatar_url, banner_url, avatar_focus_x, avatar_focus_y, banner_focus_x, banner_focus_y`,
-            [url, subject.focus.x, subject.focus.y, userId]
+            `UPDATE users
+             SET banner_url = $1,
+                 banner_focus_x = $2,
+                 banner_focus_y = $3,
+                 banner_box_x = $4,
+                 banner_box_y = $5,
+                 banner_box_width = $6,
+                 banner_box_height = $7,
+                 banner_image_width = $8,
+                 banner_image_height = $9,
+                 updated_at = datetime('now')
+             WHERE id = $10
+             RETURNING id, username, created_at, bio, avatar_url, banner_url, avatar_focus_x, avatar_focus_y, banner_focus_x, banner_focus_y, banner_box_x, banner_box_y, banner_box_width, banner_box_height, banner_image_width, banner_image_height`,
+            [url, subject.focus.x, subject.focus.y, subject.box.x, subject.box.y, subject.box.width, subject.box.height, imageWidth, imageHeight, userId]
         );
 
         res.json({ user: result.rows[0], url, subject });
@@ -300,7 +327,7 @@ router.patch('/me', authMiddleware, async (req: AuthenticatedRequest, res: Respo
         values.push(req.user!.id);
 
         const result = await pool.query(
-            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, username, created_at, bio, avatar_url, banner_url`,
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, username, created_at, bio, avatar_url, banner_url, avatar_focus_x, avatar_focus_y, banner_focus_x, banner_focus_y, banner_box_x, banner_box_y, banner_box_width, banner_box_height, banner_image_width, banner_image_height`,
             values
         );
 

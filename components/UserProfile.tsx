@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Play, Pause, Star, Music as MusicIcon, ChevronRight, Edit3, X, Camera, Image as ImageIcon, Upload, Loader2, Info } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { getAvatarUrl } from '../utils/avatar';
+import { deriveFocusSafeBox, getSafeCoverObjectPosition, normalizedBoxFromValues } from '../utils/coverPosition';
 
 interface UserProfileProps {
     username: string;
@@ -62,6 +63,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const songsSectionRef = useRef<HTMLElement | null>(null);
     const heroImageRef = useRef<HTMLImageElement | null>(null);
+    const heroViewportRef = useRef<HTMLDivElement | null>(null);
     const heroBlurLayerRef = useRef<HTMLDivElement | null>(null);
     const heroCoverLayerRef = useRef<HTMLDivElement | null>(null);
     const infoImageLayerRef = useRef<HTMLImageElement | null>(null);
@@ -86,6 +88,19 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
     const [uploadingBanner, setUploadingBanner] = useState(false);
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const bannerInputRef = useRef<HTMLInputElement>(null);
+    const bannerPreviewFrameRef = useRef<HTMLDivElement | null>(null);
+    const [heroBannerLayout, setHeroBannerLayout] = useState({
+        imageWidth: 0,
+        imageHeight: 0,
+        containerWidth: 0,
+        containerHeight: 0,
+    });
+    const [bannerPreviewLayout, setBannerPreviewLayout] = useState({
+        imageWidth: 0,
+        imageHeight: 0,
+        containerWidth: 0,
+        containerHeight: 0,
+    });
 
     useEffect(() => {
         let cancelled = false;
@@ -104,6 +119,52 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
     }, [username]);
 
     useEffect(() => {
+        setHeroBannerLayout(prev => {
+            const nextWidth = profileUser?.banner_image_width ?? 0;
+            const nextHeight = profileUser?.banner_image_height ?? 0;
+            if (prev.imageWidth === nextWidth && prev.imageHeight === nextHeight) return prev;
+            return {
+                ...prev,
+                imageWidth: nextWidth,
+                imageHeight: nextHeight,
+            };
+        });
+    }, [profileUser?.banner_image_width, profileUser?.banner_image_height]);
+
+    useEffect(() => {
+        const handleProfileUpdated = (event: Event) => {
+            const detail = (event as CustomEvent<{
+                username?: string;
+                avatarUrl?: string;
+                bannerUrl?: string;
+                version?: number;
+                profile?: UserProfileType;
+            }>).detail;
+            if (!detail?.username || detail.username !== username) return;
+
+            if (detail.profile) {
+                setProfileUser(prev => prev ? { ...prev, ...detail.profile } : detail.profile || prev);
+                setEditBio(detail.profile.bio || '');
+                setEditAvatarUrl(detail.profile.avatar_url || '');
+                setEditBannerUrl(detail.profile.banner_url || '');
+            } else {
+                setProfileUser(prev => prev ? {
+                    ...prev,
+                    avatar_url: detail.avatarUrl ?? prev.avatar_url,
+                    banner_url: detail.bannerUrl ?? prev.banner_url,
+                } : prev);
+            }
+
+            if (detail.version) {
+                setProfileAssetVersion(detail.version);
+            }
+        };
+
+        window.addEventListener('profile-updated', handleProfileUpdated);
+        return () => window.removeEventListener('profile-updated', handleProfileUpdated);
+    }, [username]);
+
+    useEffect(() => {
         if (!isEditModalOpen || !profileUser) return;
         setEditBio(profileUser.bio || '');
         setEditAvatarUrl(profileUser.avatar_url || '');
@@ -115,6 +176,52 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
         setAvatarSubject(null);
         setBannerSubject(null);
     }, [isEditModalOpen, profileUser?.avatar_url, profileUser?.banner_url, profileUser?.bio]);
+
+    useEffect(() => {
+        const heroViewport = heroViewportRef.current;
+        if (!heroViewport || typeof ResizeObserver === 'undefined') return;
+
+        const syncHeroViewport = () => {
+            setHeroBannerLayout(prev => {
+                const nextWidth = heroViewport.clientWidth;
+                const nextHeight = heroViewport.clientHeight;
+                if (prev.containerWidth === nextWidth && prev.containerHeight === nextHeight) return prev;
+                return {
+                    ...prev,
+                    containerWidth: nextWidth,
+                    containerHeight: nextHeight,
+                };
+            });
+        };
+
+        syncHeroViewport();
+        const observer = new ResizeObserver(syncHeroViewport);
+        observer.observe(heroViewport);
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const frame = bannerPreviewFrameRef.current;
+        if (!frame || typeof ResizeObserver === 'undefined') return;
+
+        const syncPreviewFrame = () => {
+            setBannerPreviewLayout(prev => {
+                const nextWidth = frame.clientWidth;
+                const nextHeight = frame.clientHeight;
+                if (prev.containerWidth === nextWidth && prev.containerHeight === nextHeight) return prev;
+                return {
+                    ...prev,
+                    containerWidth: nextWidth,
+                    containerHeight: nextHeight,
+                };
+            });
+        };
+
+        syncPreviewFrame();
+        const observer = new ResizeObserver(syncPreviewFrame);
+        observer.observe(frame);
+        return () => observer.disconnect();
+    }, [isEditModalOpen]);
 
     const applyHeroScrollState = (scrollTop: number) => {
         const progress = Math.max(0, Math.min(1, scrollTop / 360));
@@ -213,8 +320,19 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
     };
 
     const handleHeroImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+        const image = event.currentTarget;
+        setHeroBannerLayout(prev => {
+            const nextWidth = image.naturalWidth || 0;
+            const nextHeight = image.naturalHeight || 0;
+            if (prev.imageWidth === nextWidth && prev.imageHeight === nextHeight) return prev;
+            return {
+                ...prev,
+                imageWidth: nextWidth,
+                imageHeight: nextHeight,
+            };
+        });
         const palette = extractPaletteFromImage(
-            event.currentTarget,
+            image,
             DEFAULT_HERO_PALETTE,
             { base: 0.42, accent: 0.68, lift: 12 }
         );
@@ -471,6 +589,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
             let nextAvatarFocusY = profileUser.avatar_focus_y ?? 0.5;
             let nextBannerFocusX = profileUser.banner_focus_x ?? 0.5;
             let nextBannerFocusY = profileUser.banner_focus_y ?? 0.5;
+            let nextBannerBoxX = profileUser.banner_box_x;
+            let nextBannerBoxY = profileUser.banner_box_y;
+            let nextBannerBoxWidth = profileUser.banner_box_width;
+            let nextBannerBoxHeight = profileUser.banner_box_height;
 
             // Upload avatar if changed
             if (avatarFile) {
@@ -487,10 +609,21 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
             // Upload banner if changed
             if (bannerFile) {
                 setUploadingBanner(true);
-                const bannerRes = await usersApi.uploadBanner(bannerFile, token, bannerSubject);
+                const bannerRes = await usersApi.uploadBanner(
+                    bannerFile,
+                    token,
+                    bannerSubject,
+                    bannerPreviewLayout.imageWidth > 0 && bannerPreviewLayout.imageHeight > 0
+                        ? { width: bannerPreviewLayout.imageWidth, height: bannerPreviewLayout.imageHeight }
+                        : null,
+                );
                 nextBannerUrl = bannerRes.url;
                 nextBannerFocusX = bannerRes.subject.focus.x;
                 nextBannerFocusY = bannerRes.subject.focus.y;
+                nextBannerBoxX = bannerRes.subject.box.x;
+                nextBannerBoxY = bannerRes.subject.box.y;
+                nextBannerBoxWidth = bannerRes.subject.box.width;
+                nextBannerBoxHeight = bannerRes.subject.box.height;
                 console.info('[face-detection] banner', bannerRes.subject);
                 setEditBannerUrl(nextBannerUrl);
                 setUploadingBanner(false);
@@ -514,6 +647,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                 avatar_focus_y: nextAvatarFocusY,
                 banner_focus_x: nextBannerFocusX,
                 banner_focus_y: nextBannerFocusY,
+                banner_box_x: nextBannerBoxX,
+                banner_box_y: nextBannerBoxY,
+                banner_box_width: nextBannerBoxWidth,
+                banner_box_height: nextBannerBoxHeight,
             };
             if (Object.keys(updates).length > 0) {
                 const updateRes = await usersApi.updateProfile(updates, token);
@@ -543,6 +680,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                     avatarUrl: nextAvatarUrl,
                     bannerUrl: nextBannerUrl,
                     version: assetVersion,
+                    profile: updatedUser,
                 },
             }));
             setIsEditModalOpen(false);
@@ -642,11 +780,53 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
     const avatarPreviewFocus = avatarSubject ? `${avatarSubject.focus.x * 100}% ${avatarSubject.focus.y * 100}%` : 'center';
     const previewBannerX = bannerSubject?.focus.x ?? profileUser?.banner_focus_x ?? 0.5;
     const previewBannerY = bannerSubject?.focus.y ?? profileUser?.banner_focus_y ?? 0.5;
-    // A 3:1 editor preview crops much more vertically than the Hero canvas.
-    // Pull the crop upward so the complete face, not just its center, stays visible.
-    const bannerEditorFocus = `${previewBannerX * 100}% ${Math.max(0, previewBannerY - 0.2) * 100}%`;
+    const persistedBannerBox = normalizedBoxFromValues(
+        profileUser?.banner_box_x,
+        profileUser?.banner_box_y,
+        profileUser?.banner_box_width,
+        profileUser?.banner_box_height
+    );
+    const heroFacePriorityBox = persistedBannerBox
+        ? {
+            x: Math.max(0, persistedBannerBox.x - persistedBannerBox.width * 0.55),
+            y: Math.max(0, persistedBannerBox.y - persistedBannerBox.height * 1.05),
+            width: Math.min(1, persistedBannerBox.width * 2.1),
+            height: Math.min(1, persistedBannerBox.height * 2.45),
+        }
+        : null;
+    const heroFocusPoint = heroFacePriorityBox
+        ? {
+            x: Math.min(1, Math.max(0, persistedBannerBox!.x + persistedBannerBox!.width * 0.5)),
+            y: Math.min(1, Math.max(0, persistedBannerBox!.y + persistedBannerBox!.height * 0.14)),
+        }
+        : {
+            x: profileUser?.banner_focus_x ?? 0.5,
+            y: profileUser?.banner_focus_y ?? 0.5,
+        };
+    const heroSafeBox = deriveFocusSafeBox(
+        heroFocusPoint,
+        heroFacePriorityBox ?? persistedBannerBox,
+        { widthScale: 1, heightScale: 1, minSize: 0.3, anchorY: 0.18 }
+    );
+    const previewSafeBox = deriveFocusSafeBox(
+        { x: previewBannerX, y: previewBannerY },
+        bannerSubject?.box ?? persistedBannerBox,
+        { widthScale: 0.32, heightScale: 0.26, minSize: 0.14 }
+    );
+    const bannerEditorFocus = getSafeCoverObjectPosition({
+        ...bannerPreviewLayout,
+        focus: { x: previewBannerX, y: previewBannerY },
+        box: previewSafeBox ?? bannerSubject?.box ?? persistedBannerBox,
+        biasY: previewSafeBox ? -0.18 : -0.1,
+    });
+    const heroPosition = getSafeCoverObjectPosition({
+        ...heroBannerLayout,
+        focus: heroFocusPoint,
+        box: heroSafeBox ?? heroFacePriorityBox ?? persistedBannerBox,
+        biasY: heroSafeBox ? -0.52 : heroFacePriorityBox ? -0.38 : persistedBannerBox ? -0.3 : -0.18,
+    });
     const heroStyle = heroCoverUrl
-        ? { backgroundImage: `url(${heroCoverUrl})`, backgroundSize: 'cover', backgroundPosition: heroFocus }
+        ? { backgroundImage: `url(${heroCoverUrl})`, backgroundSize: 'cover', backgroundPosition: heroPosition || heroFocus }
         : {};
 
     useEffect(() => {
@@ -806,6 +986,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
             />
             {/* Artist Hero */}
             <div
+                ref={heroViewportRef}
                 className="relative min-h-[960px] overflow-hidden group/banner transition-[background-color] duration-300"
                 style={{ backgroundColor: heroPalette.base }}
             >
@@ -1039,6 +1220,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                         }}
                     >
                         <img
+                            key={profileAvatarUrl}
                             ref={infoImageLayerRef}
                             src={profileAvatarUrl}
                             alt={profileDisplayName}
@@ -1172,6 +1354,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                     <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 border-2 border-zinc-300 dark:border-zinc-700 border-dashed overflow-hidden flex-shrink-0 relative">
                                         {(avatarPreview || editAvatarPreviewUrl) ? (
                                             <img
+                                                key={profileAvatarUrl}
                                                 src={avatarPreview || editAvatarPreviewUrl}
                                                 className="w-full h-full object-cover"
                                                 style={{ objectPosition: avatarPreview ? avatarPreviewFocus : avatarFocus }}
@@ -1213,6 +1396,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('bannerImage')}</label>
                                 <div
+                                    ref={bannerPreviewFrameRef}
                                     onClick={() => bannerInputRef.current?.click()}
                                     className="relative w-full h-32 rounded-lg bg-zinc-100 dark:bg-zinc-800 border-2 border-zinc-300 dark:border-zinc-700 border-dashed overflow-hidden cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors"
                                 >
@@ -1221,6 +1405,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ username, initialUser 
                                             src={bannerPreview || editBannerPreviewUrl}
                                             className="w-full h-full object-cover"
                                             style={{ objectPosition: bannerEditorFocus }}
+                                            onLoad={(e) => {
+                                                const { naturalWidth, naturalHeight } = e.currentTarget;
+                                                setBannerPreviewLayout(prev => ({
+                                                    ...prev,
+                                                    imageWidth: naturalWidth,
+                                                    imageHeight: naturalHeight,
+                                                }));
+                                            }}
                                             onError={(e) => (e.currentTarget.style.display = 'none')}
                                         />
                                     ) : (
