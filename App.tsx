@@ -415,6 +415,20 @@ function AppContent() {
     openRightSidebar();
   }, [openRightSidebar]);
 
+  const hasPreviewBannerLayout = (profile: Partial<UserProfileType> | null | undefined) => (
+    Boolean(
+      profile?.banner_url
+      && typeof profile.banner_focus_x === 'number'
+      && typeof profile.banner_focus_y === 'number'
+      && typeof profile.banner_image_width === 'number'
+      && typeof profile.banner_image_height === 'number'
+    )
+  );
+
+  const canRenderProfilePreview = (profile: UserProfileType | null | undefined) => (
+    Boolean(profile && hasPreviewBannerLayout(profile))
+  );
+
   // Navigate to Profile Handler
   const handleNavigateToProfile = (username: string) => {
     const previewSource =
@@ -422,11 +436,22 @@ function AppContent() {
       selectedSong?.creator === username ? selectedSong :
       songs.find(song => song.creator === username) || null;
     const fallbackId = user?.username === username ? user.id : previewSource?.userId || username;
+    const previewBannerUrl = user?.username === username && hasPreviewBannerLayout(user)
+      ? user.banner_url
+      : undefined;
     setViewingProfilePreview({
       id: fallbackId,
       username,
       avatar_url: user?.username === username ? user.avatar_url : previewSource?.creator_avatar,
-      banner_url: user?.username === username ? user.banner_url : undefined,
+      banner_url: previewBannerUrl,
+      banner_focus_x: previewBannerUrl ? user?.banner_focus_x : undefined,
+      banner_focus_y: previewBannerUrl ? user?.banner_focus_y : undefined,
+      banner_box_x: previewBannerUrl ? user?.banner_box_x : undefined,
+      banner_box_y: previewBannerUrl ? user?.banner_box_y : undefined,
+      banner_box_width: previewBannerUrl ? user?.banner_box_width : undefined,
+      banner_box_height: previewBannerUrl ? user?.banner_box_height : undefined,
+      banner_image_width: previewBannerUrl ? user?.banner_image_width : undefined,
+      banner_image_height: previewBannerUrl ? user?.banner_image_height : undefined,
       bio: user?.username === username ? user.bio : undefined,
       created_at: user?.createdAt || new Date().toISOString(),
     });
@@ -1904,7 +1929,7 @@ function AppContent() {
         return (
           <UserProfile
             username={viewingUsername}
-            initialUser={viewingProfilePreview}
+            initialUser={canRenderProfilePreview(viewingProfilePreview) ? viewingProfilePreview : null}
             onBack={handleBackFromProfile}
             onPlaySong={playSong}
             onNavigateToProfile={handleNavigateToProfile}
@@ -1991,6 +2016,7 @@ function AppContent() {
                 selectedSong={selectedSong}
                 likedSongIds={likedSongIds}
                 isPlaying={isPlaying}
+                isPlaybackLoading={isPlaybackBootstrapping && !hasPlaybackPrimed}
                 referenceTracks={referenceTracks}
                 onPlay={playSong}
                 onSelect={handleSelectSong}
