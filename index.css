@@ -84,6 +84,10 @@ html.theme-switching *::after {
   animation: music-bar-bounce 720ms ease-in-out infinite;
 }
 
+.songlist-loading-spinner {
+  filter: drop-shadow(0 0 0.12rem rgba(30, 215, 96, 0.16));
+}
+
 @keyframes generating-core-pulse {
   0%, 100% {
     transform: scale(0.92);

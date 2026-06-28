@@ -18,6 +18,7 @@ interface SongListProps {
     selectedSong: Song | null;
     likedSongIds: Set<string>;
     isPlaying: boolean;
+    isPlaybackLoading?: boolean;
     referenceTracks?: { id: string; filename: string; audio_url: string; duration?: number | null; created_at?: string }[];
     onPlay: (song: Song) => void;
     onSelect: (song: Song) => void;
@@ -144,25 +145,35 @@ const TooltipInfo: React.FC<{ text: string; align?: 'left' | 'right' }> = ({ tex
     </span>
 );
 
-const NowPlayingBars: React.FC<{ active: boolean }> = ({ active }) => (
-    <div className="flex w-5 flex-shrink-0 items-center justify-center">
-        {active && (
-            <div className="flex h-5 items-end gap-[2px] text-[#1ed760]" aria-label="Now playing">
-                {[0.78, 1.12, 0.9, 1.22, 0.72].map((height, index) => (
-                    <span
-                        key={index}
-                        className="w-[2px] bg-current music-bar-anim"
-                        style={{
-                            '--music-bar-max': `${height}rem`,
-                            animationDuration: `${0.62 + index * 0.05}s`,
-                            animationDelay: `${-index * 0.11}s`,
-                        } as React.CSSProperties}
-                    />
-                ))}
-            </div>
-        )}
-    </div>
-);
+const NowPlayingBars: React.FC<{ active: boolean; loading: boolean }> = ({ active, loading }) => {
+    if (!active && !loading) {
+        return <div className="flex w-5 flex-shrink-0 items-center justify-center" />;
+    }
+
+    return (
+        <div className="flex w-5 flex-shrink-0 items-center justify-center">
+            {loading ? (
+                <div className="flex h-5 w-5 items-center justify-center text-[#1ed760]" aria-label="Loading playback">
+                    <Loader2 size={16} className="animate-spin songlist-loading-spinner" />
+                </div>
+            ) : (
+                <div className="flex h-5 items-end gap-[2px] text-[#1ed760]" aria-label="Now playing">
+                    {[0.78, 1.12, 0.9, 1.22, 0.72].map((height, index) => (
+                        <span
+                            key={index}
+                            className="w-[2px] bg-current music-bar-anim"
+                            style={{
+                                '--music-bar-max': `${height}rem`,
+                                animationDuration: `${0.62 + index * 0.05}s`,
+                                animationDelay: `${-index * 0.11}s`,
+                            } as React.CSSProperties}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const formatElapsedTime = (start: Date, now: number): string => {
     const startMs = start.getTime();
@@ -173,10 +184,10 @@ const formatElapsedTime = (start: Date, now: number): string => {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
-const getGenerationStatusText = (song: Song, now: number, t: ReturnType<typeof useI18n>['t']): string => {
+const getGenerationStatusText = (song: Song, _now: number, t: ReturnType<typeof useI18n>['t']): string => {
     if (song.queuePosition) return t('queuedStatus').replace('{position}', String(song.queuePosition));
     const stage = getGenerationStageText(song, t);
-    return `${stage} - ${formatElapsedTime(song.createdAt, now)}`;
+    return stage;
 };
 
 const createDragPreview = (element: HTMLElement) => {
@@ -217,6 +228,7 @@ export const SongList: React.FC<SongListProps> = ({
     selectedSong,
     likedSongIds,
     isPlaying,
+    isPlaybackLoading = false,
     referenceTracks = [],
     onPlay,
     onSelect,
@@ -523,6 +535,7 @@ export const SongList: React.FC<SongListProps> = ({
                                 isChecked={selectedIds.has(item.song.id)}
                                 isLiked={likedSongIds.has(item.song.id)}
                                 isPlaying={isPlaying}
+                                isPlaybackLoading={isPlaybackLoading}
                                 isOwner={user?.id === item.song.userId}
                                 now={now}
                                 onPlay={() => onPlay(item.song)}
@@ -582,6 +595,7 @@ interface SongItemProps {
     isChecked: boolean;
     isLiked: boolean;
     isPlaying: boolean;
+    isPlaybackLoading: boolean;
     isOwner: boolean;
     now: number;
     onPlay: () => void;
@@ -608,6 +622,7 @@ const SongItem: React.FC<SongItemProps> = ({
     isChecked,
     isLiked,
     isPlaying,
+    isPlaybackLoading,
     isOwner,
     now,
     onPlay,
@@ -767,7 +782,10 @@ const SongItem: React.FC<SongItemProps> = ({
                 </button>
             )}
 
-            <NowPlayingBars active={Boolean(isCurrent && isPlaying && !song.isGenerating)} />
+            <NowPlayingBars
+                active={Boolean(isCurrent && isPlaying && !song.isGenerating)}
+                loading={Boolean(isCurrent && isPlaybackLoading && !song.isGenerating)}
+            />
 
             {/* Cover Art - Reduced size */}
             <div className="relative w-16 h-16 flex-shrink-0 rounded-md bg-zinc-200 dark:bg-zinc-800 overflow-hidden shadow-sm group/image">
