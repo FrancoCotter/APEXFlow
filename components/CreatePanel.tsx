@@ -2123,7 +2123,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                     className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
                       instrumental
                         ? 'bg-[#8fb68f] text-[#132018] border-[#8fb68f]'
-                        : 'bg-white dark:bg-suno-card border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/10'
+                        : 'bg-white dark:bg-suno-card border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/10 whitespace-nowrap shrink-0 inline-flex'
                     }`}
                   >
                     {instrumental ? t('instrumental') : t('vocal')}
