@@ -377,8 +377,6 @@ export const SongList: React.FC<SongListProps> = ({
                 {/* Header */}
                 <div className="flex flex-col gap-6 mb-8">
                     <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-                        <span className="hover:text-black dark:hover:text-white cursor-pointer transition-colors">Workspaces</span>
-                        <span className="text-zinc-400 dark:text-zinc-600">›</span>
                         <span className="text-zinc-900 dark:text-white font-medium">{t('myworkspace')}</span>
                     </div>
 
