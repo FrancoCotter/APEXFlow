@@ -347,7 +347,12 @@ export const SongList: React.FC<SongListProps> = ({
             createdAt: song.createdAt,
             song
         }));
-        return songItems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return songItems.sort((a, b) => {
+            if (a.song.isGenerating !== b.song.isGenerating) {
+                return a.song.isGenerating ? -1 : 1;
+            }
+            return b.createdAt.getTime() - a.createdAt.getTime();
+        });
     }, [filteredSongs]);
 
     const selectableSongs = useMemo(
