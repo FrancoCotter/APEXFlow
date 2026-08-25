@@ -11,6 +11,7 @@ import { getAvatarUrl } from '../utils/avatar';
 import { getGeneratingSongTitle, getGenerationStageText, getModelDisplayName, getSongModelId } from '../utils/generationDisplay';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
 import { hasRenderableSyncedLyrics } from '../utils/syncedLyrics';
+import { localizeRecordingPrompt } from '../utils/recordingInstruments';
 
 interface SongListProps {
     songs: Song[];
@@ -318,8 +319,8 @@ export const SongList: React.FC<SongListProps> = ({
     const filteredSongs = useMemo(() => {
         const normalizedQuery = searchQuery.toLowerCase();
         return songs.filter(song => {
-            const songCaption = getSongCaption(song);
-            const songTags = getSongTags(song);
+            const songCaption = localizeRecordingPrompt(song, getSongCaption(song), t);
+            const songTags = getSongTags(song).map(tag => localizeRecordingPrompt(song, tag, t));
             // 1. Search Logic
             const matchesSearch =
                 (song.title || '').toLowerCase().includes(normalizedQuery) ||
@@ -338,7 +339,7 @@ export const SongList: React.FC<SongListProps> = ({
 
             return true;
         });
-    }, [songs, searchQuery, activeFilters, likedSongIds]);
+    }, [songs, searchQuery, activeFilters, likedSongIds, t]);
 
     const listItems = useMemo(() => {
         const songItems = filteredSongs.map(song => ({

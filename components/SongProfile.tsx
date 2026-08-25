@@ -8,6 +8,7 @@ import { SongDropdownMenu } from './SongDropdownMenu';
 import { getAvatarUrl } from '../utils/avatar';
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
 import { getSongLyricsUrl } from '../utils/songPlayback';
+import { localizeRecordingPrompt } from '../utils/recordingInstruments';
 
 interface SongProfileProps {
     songId: string;
@@ -345,8 +346,8 @@ export const SongProfile: React.FC<SongProfileProps> = ({ songId, initialSong = 
         );
     }
 
-    const songCaption = getSongCaption(song);
-    const displayTags = getSongTags(song);
+    const songCaption = localizeRecordingPrompt(song, getSongCaption(song), t);
+    const displayTags = getSongTags(song).map(tag => localizeRecordingPrompt(song, tag, t));
 
     return (
         <div className={`w-full h-full flex flex-col bg-zinc-50 dark:bg-black overflow-hidden transition-opacity duration-200 ${loading ? 'opacity-100' : 'opacity-100'}`}>

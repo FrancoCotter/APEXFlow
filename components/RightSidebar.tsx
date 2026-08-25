@@ -12,6 +12,7 @@ import { getGeneratingSongTitle, getGenerationStageText, getModelDisplayName } f
 import { getSongCaption, getSongTags } from '../utils/songMetadata';
 import { hasRenderableSyncedLyrics } from '../utils/syncedLyrics';
 import { getSongLyricsUrl, getSongPlaybackUrl } from '../utils/songPlayback';
+import { localizeRecordingPrompt } from '../utils/recordingInstruments';
 
 interface RightSidebarProps {
     song: Song | null;
@@ -85,8 +86,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const displayViewCount = song
         ? song.viewCount ?? (song as Song & { view_count?: number }).view_count ?? 0
         : 0;
-    const songCaption = song ? getSongCaption(song) : '';
-    const displayTags = song ? getSongTags(song) : [];
+    const songCaption = song ? localizeRecordingPrompt(song, getSongCaption(song), t) : '';
+    const displayTags = song
+        ? getSongTags(song).map(tag => localizeRecordingPrompt(song, tag, t))
+        : [];
     const canExpandCaption = songCaption.length > 140;
     const generationParams = ((song?.generationParams ?? {}) as Record<string, any>);
     const generationModel = song?.ditModel || generationParams.ditModel || generationParams.dit_model;
@@ -322,7 +325,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 </h2>
                                 {song.style && (
                                     <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-                                        {song.style}
+                                        {localizeRecordingPrompt(song, song.style, t)}
                                     </p>
                                 )}
                             </div>
