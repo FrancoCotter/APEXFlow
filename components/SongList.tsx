@@ -743,13 +743,15 @@ const SongItem: React.FC<SongItemProps> = ({
         <>
         <div
             ref={itemRef}
+            data-song-id={song.id}
             onClick={onSelect}
             draggable={Boolean(song.audioUrl) && !song.isGenerating}
             onDragStart={(e) => {
                 if (!song.audioUrl || song.isGenerating) return;
                 e.dataTransfer.effectAllowed = 'copy';
                 e.dataTransfer.setData('application/x-ace-audio', JSON.stringify({
-                    url: song.audioUrl,
+                  id: song.id,
+                  url: song.audioUrl,
                     title: song.title || 'Untitled',
                     source: 'song',
                 }));

@@ -441,6 +441,10 @@ interface GenerateBody {
   sourceAudioUrl?: string;
   referenceAudioTitle?: string;
   sourceAudioTitle?: string;
+  referenceAudioOrigin?: 'recording' | 'upload' | 'song';
+  referenceAudioId?: string;
+  sourceAudioOrigin?: 'recording' | 'upload' | 'song';
+  sourceAudioId?: string;
   recordingInstrument?: string;
   audioCodes?: string;
   repaintingStart?: number;
@@ -862,6 +866,10 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       sourceAudioUrl,
       referenceAudioTitle,
       sourceAudioTitle,
+      referenceAudioOrigin,
+      referenceAudioId,
+      sourceAudioOrigin,
+      sourceAudioId,
       recordingInstrument,
       audioCodes,
       repaintingStart,
@@ -1025,6 +1033,10 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       sourceAudioUrl,
       referenceAudioTitle,
       sourceAudioTitle,
+      referenceAudioOrigin,
+      referenceAudioId,
+      sourceAudioOrigin,
+      sourceAudioId,
       recordingInstrument,
       audioCodes,
       repaintingStart,

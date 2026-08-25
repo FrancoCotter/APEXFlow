@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Sparkles, ChevronDown, Settings2, Trash2, Music2, Sliders, Dices, Hash, RefreshCw, Plus, Upload, Play, Pause, Loader2, Mic, Square } from 'lucide-react';
-import { GenerationParams, Song } from '../types';
+import { AudioSourceOrigin, GenerationParams, Song } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { generateApi } from '../services/api';
@@ -24,7 +24,7 @@ interface CreatePanelProps {
   isGenerating: boolean;
   initialData?: { song: Song, timestamp: number } | null;
   createdSongs?: Song[];
-  pendingAudioSelection?: { target: 'reference' | 'source'; url: string; title?: string } | null;
+  pendingAudioSelection?: { target: 'reference' | 'source'; url: string; title?: string; origin: Exclude<AudioSourceOrigin, 'recording'>; id: string } | null;
   onAudioSelectionApplied?: () => void;
 }
 
@@ -363,6 +363,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [sourceAudioUrl, setSourceAudioUrl] = useState('');
   const [referenceAudioTitle, setReferenceAudioTitle] = useState('');
   const [sourceAudioTitle, setSourceAudioTitle] = useState('');
+  const [referenceAudioOrigin, setReferenceAudioOrigin] = useState<AudioSourceOrigin | null>(null);
+  const [referenceAudioId, setReferenceAudioId] = useState<string | null>(null);
+  const [sourceAudioId, setSourceAudioId] = useState<string | null>(null);
   const [recordingInstrument, setRecordingInstrument] = useState('');
   const [temporaryRecordingId, setTemporaryRecordingId] = useState<string | null>(null);
   const [audioCodes, setAudioCodes] = useState('');
@@ -529,7 +532,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [sourceTime, setSourceTime] = useState(0);
   const [referenceDuration, setReferenceDuration] = useState(0);
   const [sourceDuration, setSourceDuration] = useState(0);
-  const [sourceAudioOrigin, setSourceAudioOrigin] = useState<'recording' | null>(null);
+  const [sourceAudioOrigin, setSourceAudioOrigin] = useState<AudioSourceOrigin | null>(null);
   const [recordingLyricsOverride, setRecordingLyricsOverride] = useState(false);
   const [isRequestingMicrophone, setIsRequestingMicrophone] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -893,21 +896,51 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         setInferMethod(params.infer_method);
       }
 
-      setReferenceAudioUrl(
-        typeof params.referenceAudioUrl === 'string'
-          ? params.referenceAudioUrl
-          : typeof params.reference_audio_url === 'string'
-            ? params.reference_audio_url
-            : ''
-      );
-      setSourceAudioUrl(
-        typeof params.sourceAudioUrl === 'string'
-          ? params.sourceAudioUrl
-          : typeof params.source_audio_url === 'string'
-            ? params.source_audio_url
-            : ''
-      );
+      const reusedReferenceUrl = params.referenceAudioUrl ?? params.reference_audio_url ?? '';
+      const reusedSourceUrl = params.sourceAudioUrl ?? params.source_audio_url ?? '';
+      const reusedReferenceOrigin = params.referenceAudioOrigin ?? params.reference_audio_origin;
+      const reusedSourceOrigin = params.sourceAudioOrigin ?? params.source_audio_origin;
+      const reusedReferenceId = params.referenceAudioId ?? params.reference_audio_id ?? null;
+      const reusedSourceId = params.sourceAudioId ?? params.source_audio_id ?? null;
+      setReferenceAudioUrl('');
+      setSourceAudioUrl('');
+      setReferenceAudioOrigin(null);
+      setReferenceAudioId(null);
       setSourceAudioOrigin(null);
+      setSourceAudioId(null);
+
+      const restoreKnownSource = async (
+        target: 'reference' | 'source',
+        origin: unknown,
+        id: unknown,
+        url: unknown,
+      ) => {
+        if (!token || !['upload', 'song'].includes(String(origin)) || typeof id !== 'string' || typeof url !== 'string' || !url) return;
+        try {
+          const response = origin === 'song'
+            ? await fetch(`/api/songs/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } })
+            : await fetch('/api/reference-tracks', { headers: { Authorization: `Bearer ${token}` } });
+          if (!response.ok) return;
+          if (origin === 'upload') {
+            const data = await response.json();
+            if (!Array.isArray(data.tracks) || !data.tracks.some((track: ReferenceTrack) => track.id === id)) return;
+          }
+          if (target === 'reference') {
+            setReferenceAudioUrl(url);
+            setReferenceAudioOrigin(origin as 'upload' | 'song');
+            setReferenceAudioId(id);
+          } else {
+            setSourceAudioUrl(url);
+            setSourceAudioOrigin(origin as 'upload' | 'song');
+            setSourceAudioId(id);
+            if (typeof reusedTaskType === 'string') setTaskType(normalizeTaskType(reusedTaskType));
+          }
+        } catch {
+          // Deleted or inaccessible sources stay detached when reusing parameters.
+        }
+      };
+      void restoreKnownSource('reference', reusedReferenceOrigin, reusedReferenceId, reusedReferenceUrl);
+      void restoreKnownSource('source', reusedSourceOrigin, reusedSourceId, reusedSourceUrl);
       setRecordingLyricsOverride(false);
       setReferenceAudioTitle(
         typeof params.referenceAudioTitle === 'string'
@@ -931,7 +964,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
             : 1.0
       );
 
-      setTaskType(typeof reusedTaskType === 'string' ? normalizeTaskType(reusedTaskType) : 'text2music');
+      const normalizedReusedTask = typeof reusedTaskType === 'string' ? normalizeTaskType(reusedTaskType) : 'text2music';
+      setTaskType(SOURCE_TASKS.has(normalizedReusedTask) ? 'text2music' : normalizedReusedTask);
       if (typeof reusedModel === 'string' && reusedModel.length > 0) {
         setSelectedModel(reusedModel);
         localStorage.setItem('ace-model', reusedModel);
@@ -959,7 +993,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       );
       setCustomExampleSnapshot({ lyrics: nextLyrics, style: nextStyle });
     }
-  }, [initialData]);
+  }, [initialData, token]);
 
   useEffect(() => {
     createPanelDraftMemory = {
@@ -1020,7 +1054,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     applyAudioTargetUrl(
       pendingAudioSelection.target,
       pendingAudioSelection.url,
-      pendingAudioSelection.title
+      pendingAudioSelection.title,
+      pendingAudioSelection.origin,
+      pendingAudioSelection.id,
     );
     onAudioSelectionApplied?.();
   }, [pendingAudioSelection, onAudioSelectionApplied]);
@@ -1456,7 +1492,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
 
       // Also set as current reference/source
       const selectedTarget = target ?? audioModalTarget;
-      applyAudioTargetUrl(selectedTarget, data.track.audio_url, data.track.filename, options?.origin ?? null);
+      applyAudioTargetUrl(
+        selectedTarget,
+        data.track.audio_url,
+        data.track.filename,
+        options?.origin ?? 'upload',
+        isTemporaryRecording ? data.recording_id : data.track.id,
+      );
       if (options?.transcribe !== false && data.whisper_available && data.track?.id) {
         void transcribeReferenceTrack(data.track.id).then(() => undefined);
       } else {
@@ -1533,8 +1575,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     }
   };
 
-  const useReferenceTrack = (track: { audio_url: string; title?: string }) => {
-    applyAudioTargetUrl(audioModalTarget, track.audio_url, track.title);
+  const useReferenceTrack = (track: { id: string; audio_url: string; title?: string; origin: 'upload' | 'song' }) => {
+    applyAudioTargetUrl(audioModalTarget, track.audio_url, track.title, track.origin, track.id);
     setShowAudioModal(false);
     setPlayingTrackId(null);
     setPlayingTrackSource(null);
@@ -1568,12 +1610,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     target: 'reference' | 'source',
     url: string,
     title?: string,
-    origin: 'recording' | null = null,
+    origin: AudioSourceOrigin | null = null,
+    id: string | null = null,
   ) => {
     const derivedTitle = title ? title.replace(/\.[^/.]+$/, '') : getAudioLabel(url);
     if (target === 'reference') {
       setReferenceAudioUrl(url);
       setReferenceAudioTitle(derivedTitle);
+      setReferenceAudioOrigin(origin);
+      setReferenceAudioId(id);
       setReferenceTime(0);
       setReferenceDuration(0);
     } else {
@@ -1584,6 +1629,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       setSourceAudioUrl(url);
       setSourceAudioTitle(derivedTitle);
       setSourceAudioOrigin(origin);
+      setSourceAudioId(id);
       setRecordingLyricsOverride(false);
       setRecordingError(null);
       setSourceTime(0);
@@ -1607,6 +1653,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     setSourceAudioUrl('');
     setSourceAudioTitle('');
     setSourceAudioOrigin(null);
+    setSourceAudioId(null);
     setRecordingInstrument('');
     setRecordingLyricsOverride(false);
     setSourcePlaying(false);
@@ -1818,7 +1865,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       try {
         const data = JSON.parse(payload);
         if (data?.url) {
-          applyAudioTargetUrl(target, data.url, data.title);
+          applyAudioTargetUrl(target, data.url, data.title, data.source === 'song' ? 'song' : 'upload', data.id || null);
         }
       } catch {
         // ignore
@@ -1940,6 +1987,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         sourceAudioUrl: SOURCE_TASKS.has(effectiveTaskType) ? sourceAudioUrl.trim() || undefined : undefined,
         referenceAudioTitle: referenceAudioTitle.trim() || undefined,
         sourceAudioTitle: sourceAudioTitle.trim() || undefined,
+        referenceAudioOrigin: referenceAudioOrigin || undefined,
+        referenceAudioId: referenceAudioId || undefined,
+        sourceAudioOrigin: SOURCE_TASKS.has(effectiveTaskType) ? sourceAudioOrigin || undefined : undefined,
+        sourceAudioId: SOURCE_TASKS.has(effectiveTaskType) ? sourceAudioId || undefined : undefined,
         recordingInstrument: isRecordingSource ? recordingInstrument : undefined,
         audioCodes: audioCodes.trim() || undefined,
         repaintingStart: effectiveTaskType === 'repaint' || effectiveTaskType === 'lego' ? repaintingStart : undefined,
@@ -2452,7 +2503,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => { setReferenceAudioUrl(''); setReferenceAudioTitle(''); setReferencePlaying(false); setReferenceTime(0); setReferenceDuration(0); }}
+                        onClick={() => { setReferenceAudioUrl(''); setReferenceAudioTitle(''); setReferenceAudioOrigin(null); setReferenceAudioId(null); setReferencePlaying(false); setReferenceTime(0); setReferenceDuration(0); }}
                         className="p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-400 hover:text-zinc-600 dark:hover:text-white transition-colors"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
@@ -3936,7 +3987,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               type="button"
-                              onClick={() => useReferenceTrack({ audio_url: track.audio_url, title: track.filename })}
+                              onClick={() => useReferenceTrack({ id: track.id, audio_url: track.audio_url, title: track.filename, origin: 'upload' })}
                               className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors"
                             >
                               {t('useTrack')}
@@ -4018,7 +4069,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
-                            onClick={() => useReferenceTrack({ audio_url: track.audio_url, title: track.title })}
+                            onClick={() => useReferenceTrack({ id: track.id, audio_url: track.audio_url, title: track.title, origin: 'song' })}
                             className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors"
                           >
                             {t('useTrack')}

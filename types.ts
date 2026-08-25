@@ -58,6 +58,8 @@ export interface Comment {
   createdAt: Date;
 }
 
+export type AudioSourceOrigin = 'recording' | 'upload' | 'song';
+
 export interface GenerationParams {
   // Mode
   customMode: boolean;
@@ -108,6 +110,10 @@ export interface GenerationParams {
   sourceAudioUrl?: string;
   referenceAudioTitle?: string;
   sourceAudioTitle?: string;
+  referenceAudioOrigin?: AudioSourceOrigin;
+  referenceAudioId?: string;
+  sourceAudioOrigin?: AudioSourceOrigin;
+  sourceAudioId?: string;
   recordingInstrument?: string;
   audioCodes?: string;
   repaintingStart?: number;

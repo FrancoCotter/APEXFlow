@@ -136,7 +136,7 @@ function AppContent() {
   const [showRightSidebar, setShowRightSidebar] = useState(false);
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
-  const [pendingAudioSelection, setPendingAudioSelection] = useState<{ target: 'reference' | 'source'; url: string; title?: string } | null>(null);
+  const [pendingAudioSelection, setPendingAudioSelection] = useState<{ target: 'reference' | 'source'; url: string; title?: string; origin: 'upload' | 'song'; id: string } | null>(null);
 
   // Mobile UI Toggle
   const [mobileShowList, setMobileShowList] = useState(false);
@@ -1367,6 +1367,10 @@ function AppContent() {
         sourceAudioUrl: params.sourceAudioUrl,
         referenceAudioTitle: params.referenceAudioTitle,
         sourceAudioTitle: params.sourceAudioTitle,
+        referenceAudioOrigin: params.referenceAudioOrigin,
+        referenceAudioId: params.referenceAudioId,
+        sourceAudioOrigin: params.sourceAudioOrigin,
+        sourceAudioId: params.sourceAudioId,
         recordingInstrument: params.recordingInstrument,
         audioCodes: params.audioCodes,
         repaintingStart: params.repaintingStart,
@@ -1623,6 +1627,59 @@ function AppContent() {
     openRightSidebar();
   };
 
+  const handleSourceSongAction = useCallback(async (songId: string, action: 'select' | 'play') => {
+    try {
+      let sourceSong = songs.find(item => item.id === songId) || null;
+      if (!sourceSong?.hasDetails) {
+        const response = await songsApi.getSong(songId, token);
+        sourceSong = mapApiSong(response.song, true);
+      }
+      if (!sourceSong || !hasSongPlaybackSource(sourceSong)) throw new Error('Source song unavailable');
+
+      setSongs(previous => {
+        const exists = previous.some(item => item.id === sourceSong!.id);
+        return exists
+          ? previous.map(item => item.id === sourceSong!.id ? { ...item, ...sourceSong! } : item)
+          : [sourceSong!, ...previous];
+      });
+      setCurrentView('create');
+      setMobileShowList(false);
+      if (action === 'play') playSong(sourceSong);
+      else {
+        setSelectedSong(sourceSong);
+        openRightSidebar();
+      }
+      window.setTimeout(() => {
+        document.querySelector<HTMLElement>(`[data-song-id="${CSS.escape(songId)}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 80);
+    } catch (error) {
+      console.error('Failed to open source song:', error);
+      showToast(t('songNotAvailable'), 'error');
+    }
+  }, [mapApiSong, openRightSidebar, playSong, songs, t, token]);
+
+  const handlePlayUploadSource = useCallback((source: { id: string; url: string; title: string }) => {
+    const preview: Song = {
+      id: `upload_source_${source.id}`,
+      title: source.title,
+      lyrics: '',
+      style: '',
+      coverUrl: selectedSong?.coverUrl || '',
+      duration: '0:00',
+      createdAt: new Date(),
+      tags: [],
+      audioUrl: source.url,
+      playbackUrl: source.url,
+      isPublic: false,
+    };
+    beginImmediatePlayback(preview);
+    setCurrentSong(preview);
+    setPlayQueue([preview]);
+    setQueueIndex(0);
+    setIsPlaying(true);
+  }, [beginImmediatePlayback, selectedSong?.coverUrl]);
+
   const playSongAtTime = (song: Song, time: number) => {
     if (!hasSongPlaybackSource(song)) {
       showToast(t('songNotAvailable'), 'error');
@@ -1836,33 +1893,37 @@ function AppContent() {
 
   const handleUseAsReference = (song: Song) => {
     if (!song.audioUrl) return;
-    setPendingAudioSelection({ target: 'reference', url: song.audioUrl, title: song.title });
+    setPendingAudioSelection({ target: 'reference', url: song.audioUrl, title: song.title, origin: 'song', id: song.id });
     setCurrentView('create');
     setMobileShowList(false);
   };
 
   const handleCoverSong = (song: Song) => {
     if (!song.audioUrl) return;
-    setPendingAudioSelection({ target: 'source', url: song.audioUrl, title: song.title });
+    setPendingAudioSelection({ target: 'source', url: song.audioUrl, title: song.title, origin: 'song', id: song.id });
     setCurrentView('create');
     setMobileShowList(false);
   };
 
-  const handleUseUploadAsReference = (track: { audio_url: string; filename: string }) => {
+  const handleUseUploadAsReference = (track: { id: string; audio_url: string; filename: string }) => {
     setPendingAudioSelection({
       target: 'reference',
       url: track.audio_url,
       title: track.filename.replace(/\.[^/.]+$/, ''),
+      origin: 'upload',
+      id: track.id,
     });
     setCurrentView('create');
     setMobileShowList(false);
   };
 
-  const handleCoverUpload = (track: { audio_url: string; filename: string }) => {
+  const handleCoverUpload = (track: { id: string; audio_url: string; filename: string }) => {
     setPendingAudioSelection({
       target: 'source',
       url: track.audio_url,
       title: track.filename.replace(/\.[^/.]+$/, ''),
+      origin: 'upload',
+      id: track.id,
     });
     setCurrentView('create');
     setMobileShowList(false);
@@ -1980,6 +2041,8 @@ function AppContent() {
             isPlaying={isPlaying}
             onNavigateToProfile={handleNavigateToProfile}
             onNavigateToSong={handleNavigateToSong}
+            onSourceSongAction={handleSourceSongAction}
+            onPlayUploadSource={handlePlayUploadSource}
             onNavigateToPlaylist={handleNavigateToPlaylist}
           />
         );
@@ -2063,6 +2126,8 @@ function AppContent() {
                     onSongUpdate={handleSongUpdate}
                     onNavigateToProfile={handleNavigateToProfile}
                     onNavigateToSong={handleNavigateToSong}
+                    onSourceSongAction={handleSourceSongAction}
+                    onPlayUploadSource={handlePlayUploadSource}
                     isLiked={selectedSong ? likedSongIds.has(selectedSong.id) : false}
                     onToggleLike={toggleLike}
                     onDelete={handleDeleteSong}
@@ -2151,6 +2216,8 @@ function AppContent() {
         isLiked={currentSong ? likedSongIds.has(currentSong.id) : false}
         onToggleLike={() => currentSong && toggleLike(currentSong.id)}
         onNavigateToSong={handleNavigateToSong}
+        onSourceSongAction={handleSourceSongAction}
+        onPlayUploadSource={handlePlayUploadSource}
         onNavigateToProfile={handleNavigateToProfile}
         onOpenVideo={() => currentSong && openVideoGenerator(currentSong)}
         onReusePrompt={() => currentSong && handleReuse(currentSong)}
@@ -2218,6 +2285,8 @@ function AppContent() {
               onSongUpdate={handleSongUpdate}
               onNavigateToProfile={handleNavigateToProfile}
               onNavigateToSong={handleNavigateToSong}
+              onSourceSongAction={handleSourceSongAction}
+              onPlayUploadSource={handlePlayUploadSource}
               isLiked={selectedSong ? likedSongIds.has(selectedSong.id) : false}
               onToggleLike={toggleLike}
               onDelete={handleDeleteSong}

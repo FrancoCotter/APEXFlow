@@ -445,6 +445,9 @@ export const translations = {
     legoTask: 'Lego',
     extractTask: 'Extract',
     completeTask: 'Complete',
+    recordingToInstrumentTask: 'Recording → Instrument',
+    recordingSource: 'Recording',
+    sourceAudioLabel: 'Source Audio',
     
     // Search Page
     searchSongsPlaceholder: 'Search for songs, playlists, creators, or genres',
@@ -1193,6 +1196,9 @@ export const translations = {
     legoTask: '乐高',
     extractTask: '提取',
     completeTask: '补全',
+    recordingToInstrumentTask: '录音 → 乐器',
+    recordingSource: '录音',
+    sourceAudioLabel: '源音频',
     
     // Search Page
     searchSongsPlaceholder: '搜索歌曲、播放列表、创作者或风格',
@@ -1988,6 +1994,9 @@ export const translations = {
     legoTask: 'Lego',
     extractTask: '抽出',
     completeTask: '補完',
+    recordingToInstrumentTask: '録音 → 楽器',
+    recordingSource: '録音',
+    sourceAudioLabel: 'ソース音声',
     
     // Search Page
     searchSongsPlaceholder: '曲、プレイリスト、クリエイター、スタイルを検索',
@@ -2783,6 +2792,9 @@ export const translations = {
     legoTask: 'Lego',
     extractTask: '추출',
     completeTask: '완성',
+    recordingToInstrumentTask: '녹음 → 악기',
+    recordingSource: '녹음',
+    sourceAudioLabel: '소스 오디오',
     
     // Search Page
     searchSongsPlaceholder: '곡, 재생목록, 제작자 또는 스타일 검색',

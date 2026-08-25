@@ -376,6 +376,10 @@ export interface GenerationParams {
   sourceAudioUrl?: string;
   referenceAudioTitle?: string;
   sourceAudioTitle?: string;
+  referenceAudioOrigin?: 'recording' | 'upload' | 'song';
+  referenceAudioId?: string;
+  sourceAudioOrigin?: 'recording' | 'upload' | 'song';
+  sourceAudioId?: string;
   recordingInstrument?: string;
   audioCodes?: string;
   repaintingStart?: number;
