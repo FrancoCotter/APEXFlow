@@ -36,6 +36,7 @@ const STAGE_KEY_BY_TEXT: Record<string, TranslationKey> = {
   'calculating scores...': 'calculatingScores',
   'saving output files...': 'savingOutputFiles',
   'generating music via gradio...': 'generatingMusicViaGradio',
+  'converting recording to instrument...': 'convertingRecordingToInstrument',
 };
 
 export const getModelDisplayName = (modelId?: string): string => {
@@ -74,6 +75,13 @@ export const getGenerationStageText = (
   const loadingModelMatch = song.stage?.trim().match(/^Loading model (.+)\.\.\.$/i);
   if (loadingModelMatch) {
     return t('loadingSelectedModel').replace('{model}', getModelDisplayName(loadingModelMatch[1]));
+  }
+
+  const extendingInstrumentMatch = song.stage?.trim().match(/^Extending instrument clip (\d+)\/(\d+)\.\.\.$/i);
+  if (extendingInstrumentMatch) {
+    return t('extendingInstrumentClip')
+      .replace('{current}', extendingInstrumentMatch[1])
+      .replace('{total}', extendingInstrumentMatch[2]);
   }
 
   const key = song.stageKey || getGenerationStageKey(song.stage);
