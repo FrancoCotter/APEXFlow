@@ -67,9 +67,54 @@ const RetryingCoverImage: React.FC<{ url: string; alt: string; className: string
     );
 };
 
+const useAudioSourceAvailability = (url: string | undefined, enabled: boolean) => {
+    const [available, setAvailable] = useState(false);
+
+    const check = React.useCallback(async (): Promise<boolean> => {
+        if (!enabled || !url) {
+            setAvailable(false);
+            return false;
+        }
+        try {
+            const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+            setAvailable(response.ok);
+            return response.ok;
+        } catch {
+            setAvailable(false);
+            return false;
+        }
+    }, [enabled, url]);
+
+    useEffect(() => {
+        void check();
+        const handleFocus = () => void check();
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [check]);
+
+    return { available, check };
+};
+
+const getRecordingDate = (title: string | undefined, fallback: Date): Date => {
+    const match = title?.match(
+        /^recording-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z/i,
+    );
+    if (!match) return fallback;
+    const parsed = new Date(Date.UTC(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3]),
+        Number(match[4]),
+        Number(match[5]),
+        Number(match[6]),
+        Number(match[7] || 0),
+    ));
+    return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+};
+
 export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpenVideo, onReuse, onSongUpdate, onNavigateToProfile, onNavigateToSong, isLiked, onToggleLike, onDelete, onAddToPlaylist, onPlay, isPlaying, currentSong }) => {
     const { token, user } = useAuth();
-    const { t } = useI18n();
+    const { t, language } = useI18n();
     const [showMenu, setShowMenu] = useState(false);
     const [isOwner, setIsOwner] = useState(false);
     const [tagsExpanded, setTagsExpanded] = useState(false);
@@ -98,8 +143,39 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const generationKeyScale = song?.key_scale || generationParams.keyScale || generationParams.key_scale;
     const generationTimeSignature = song?.time_signature || generationParams.timeSignature || generationParams.time_signature;
     const generationTaskType = generationParams.taskType || generationParams.task_type || 'text2music';
-    const generationHasReference = Boolean(generationParams.referenceAudioUrl || generationParams.reference_audio_url);
-    const generationHasSource = Boolean(generationParams.sourceAudioUrl || generationParams.source_audio_url);
+    const generationReferenceAudioUrl = generationParams.referenceAudioUrl || generationParams.reference_audio_url;
+    const generationSourceAudioUrl = generationParams.sourceAudioUrl || generationParams.source_audio_url;
+    const generationReferenceAudioTitle = generationParams.referenceAudioTitle || generationParams.reference_audio_title;
+    const generationSourceAudioTitle = generationParams.sourceAudioTitle || generationParams.source_audio_title;
+    const generationHasReference = Boolean(generationReferenceAudioUrl);
+    const generationHasSource = Boolean(generationSourceAudioUrl);
+    const isTemporaryRecordingSource = Boolean(
+        generationParams.recordingInstrument
+        || generationParams.recording_instrument
+        || (typeof generationSourceAudioUrl === 'string'
+            && generationSourceAudioUrl.includes('/audio/temporary-recordings/'))
+    );
+    const referenceAvailability = useAudioSourceAvailability(
+        typeof generationReferenceAudioUrl === 'string' ? generationReferenceAudioUrl : undefined,
+        generationHasReference,
+    );
+    const sourceAvailability = useAudioSourceAvailability(
+        typeof generationSourceAudioUrl === 'string' ? generationSourceAudioUrl : undefined,
+        generationHasSource && !isTemporaryRecordingSource,
+    );
+    const recordingDate = song
+        ? getRecordingDate(
+            typeof generationSourceAudioTitle === 'string' ? generationSourceAudioTitle : undefined,
+            song.createdAt,
+        )
+        : null;
+    const recordingDateLocale = ({ en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as const)[language];
+    const recordingDateLabel = recordingDate
+        ? t('recordedOn').replace('{date}', recordingDate.toLocaleString(recordingDateLocale, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+        }))
+        : '';
     const generationHasSyncedLyrics = Boolean(
         generationParams.getLrc
         ?? generationParams.get_lrc
@@ -135,7 +211,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
         typeof generationParams.vaeModel === 'string' && generationParams.vaeModel ? { label: 'VAE', value: generationParams.vaeModel } : null,
         typeof generationParams.dcwEnabled === 'boolean' ? { label: 'DCW', value: generationParams.dcwEnabled ? t('on') : t('off') } : null,
     ].filter(Boolean) as Array<{ label: string; value: string }> : [];
-    const hasGenerationSources = Boolean(song?.generationParams?.referenceAudioUrl || song?.generationParams?.sourceAudioUrl);
+    const hasGenerationSources = generationHasReference || generationHasSource;
 
     useEffect(() => {
         if (song) {
@@ -594,31 +670,31 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                 {t('sourcesLabel')}
                             </div>
                             <div className="space-y-2">
-                                {song.generationParams?.referenceAudioUrl && (
+                                {generationHasReference && (
                                     <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900/40 px-3 py-2">
                                         <div className="flex items-center gap-2 min-w-0">
                                             <Music size={14} className="text-zinc-400" />
                                             <div className="min-w-0">
                                                 <div className="text-xs text-zinc-500">{t('reference')}</div>
                                                 <div className="text-sm font-medium text-zinc-900 dark:text-white truncate">
-                                                    {song.generationParams?.referenceAudioTitle || getSourceLabel(song.generationParams?.referenceAudioUrl)}
+                                                    {generationReferenceAudioTitle || getSourceLabel(generationReferenceAudioUrl)}
                                                 </div>
                                             </div>
                                         </div>
-                                            <button
+                                            {referenceAvailability.available && <button
                                                 className="text-xs px-2 py-1 rounded-full border border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors"
-                                                onClick={() => {
-                                                    if (!song.generationParams?.referenceAudioUrl || !onPlay) return;
+                                                onClick={async () => {
+                                                    if (!generationReferenceAudioUrl || !onPlay || !await referenceAvailability.check()) return;
                                                     const previewSong = {
                                                         id: `ref_${song.id}`,
-                                                        title: song.generationParams?.referenceAudioTitle || getSourceLabel(song.generationParams?.referenceAudioUrl),
+                                                        title: generationReferenceAudioTitle || getSourceLabel(generationReferenceAudioUrl),
                                                         lyrics: '',
                                                         style: t('reference'),
                                                         coverUrl: song.coverUrl,
                                                         duration: '0:00',
                                                         createdAt: new Date(),
                                                         tags: [],
-                                                        audioUrl: song.generationParams?.referenceAudioUrl,
+                                                        audioUrl: generationReferenceAudioUrl,
                                                         isPublic: false,
                                                         userId: song.userId,
                                                         creator: song.creator,
@@ -627,34 +703,36 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                                 }}
                                             >
                                                 {t('play')}
-                                            </button>
+                                            </button>}
                                     </div>
                                 )}
-                                {song.generationParams?.sourceAudioUrl && (
+                                {generationHasSource && (
                                     <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900/40 px-3 py-2">
                                         <div className="flex items-center gap-2 min-w-0">
                                             <Layers size={14} className="text-zinc-400" />
                                             <div className="min-w-0">
                                                 <div className="text-xs text-zinc-500">{t('cover')}</div>
                                                 <div className="text-sm font-medium text-zinc-900 dark:text-white truncate">
-                                                    {song.generationParams?.sourceAudioTitle || getSourceLabel(song.generationParams?.sourceAudioUrl)}
+                                                    {isTemporaryRecordingSource
+                                                        ? recordingDateLabel
+                                                        : generationSourceAudioTitle || getSourceLabel(generationSourceAudioUrl)}
                                                 </div>
                                             </div>
                                         </div>
-                                            <button
+                                            {sourceAvailability.available && <button
                                                 className="text-xs px-2 py-1 rounded-full border border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors"
-                                                onClick={() => {
-                                                    if (!song.generationParams?.sourceAudioUrl || !onPlay) return;
+                                                onClick={async () => {
+                                                    if (!generationSourceAudioUrl || !onPlay || !await sourceAvailability.check()) return;
                                                     const previewSong = {
                                                         id: `cover_${song.id}`,
-                                                        title: song.generationParams?.sourceAudioTitle || getSourceLabel(song.generationParams?.sourceAudioUrl),
+                                                        title: generationSourceAudioTitle || getSourceLabel(generationSourceAudioUrl),
                                                         lyrics: '',
                                                         style: t('cover'),
                                                         coverUrl: song.coverUrl,
                                                         duration: '0:00',
                                                         createdAt: new Date(),
                                                         tags: [],
-                                                        audioUrl: song.generationParams?.sourceAudioUrl,
+                                                        audioUrl: generationSourceAudioUrl,
                                                         isPublic: false,
                                                         userId: song.userId,
                                                         creator: song.creator,
@@ -663,7 +741,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
                                                 }}
                                             >
                                                 {t('play')}
-                                            </button>
+                                            </button>}
                                     </div>
                                 )}
                             </div>
