@@ -178,7 +178,8 @@ async function buildGradioArgs(params: GenerationParams): Promise<unknown[]> {
   const referenceAudio = await prepareAudioFile(params.referenceAudioUrl);
   const sourceAudio = await prepareAudioFile(params.sourceAudioUrl);
 
-  const needsSource = params.taskType === 'cover' || params.taskType === 'audio2audio' || params.taskType === 'repaint';
+  const resolvedTaskType = normalizeGenerationTask(params.taskType);
+  const needsSource = SOURCE_TASK_TYPES.has(resolvedTaskType);
   if (needsSource && params.sourceAudioUrl && sourceAudio === null) {
     throw new Error(`Source audio file could not be loaded...`);
   }
@@ -204,10 +205,10 @@ async function buildGradioArgs(params: GenerationParams): Promise<unknown[]> {
     params.audioCodes || '',                                      // 14: LM Codes Hints
     params.repaintingStart ?? 0.0,                                // 15: Repainting Start
     params.repaintingEnd ?? -1,                                   // 16: Repainting End
-    params.instruction || 'Fill the audio semantic mask...',       // 17: Instruction
+    resolveTaskInstruction(params),                                // 17: Instruction
     params.audioCoverStrength ?? 1.0,                             // 18: Audio Cover Strength
     0.0,                                                          // 19: Cover Noise Strength
-    (params.taskType === 'audio2audio' ? 'cover' : params.taskType) || 'text2music', // 20: Task Type
+    resolvedTaskType,                                              // 20: Task Type
     false,                                                        // 21: no_fsq
     params.useAdg ?? false,                                       // 22: use_adg
     params.cfgIntervalStart ?? 0.0,                               // 23: cfg_interval_start
@@ -376,6 +377,7 @@ export interface GenerationParams {
   sourceAudioUrl?: string;
   referenceAudioTitle?: string;
   sourceAudioTitle?: string;
+  recordingInstrument?: string;
   audioCodes?: string;
   repaintingStart?: number;
   repaintingEnd?: number;
@@ -407,6 +409,49 @@ export interface GenerationParams {
   // Model selection
   ditModel?: string;
   vaeModel?: string;
+}
+
+type AceTaskType = 'text2music' | 'cover' | 'repaint' | 'lego' | 'extract' | 'complete';
+const SOURCE_TASK_TYPES = new Set<AceTaskType>(['cover', 'repaint', 'lego', 'extract', 'complete']);
+const BASE_ONLY_TASK_TYPES = new Set<AceTaskType>(['lego', 'extract', 'complete']);
+
+function normalizeGenerationTask(taskType?: string): AceTaskType {
+  if (taskType === 'audio2audio') return 'cover';
+  if (taskType === 'cover' || taskType === 'repaint' || taskType === 'lego' || taskType === 'extract' || taskType === 'complete') {
+    return taskType;
+  }
+  return 'text2music';
+}
+
+function isPureBaseModelId(modelId?: string): boolean {
+  const normalized = (modelId || '').toLowerCase();
+  const baseNamed = normalized.includes('base') || normalized.endsWith('-b') || normalized.includes('xl-b');
+  return baseNamed && !normalized.includes('turbo') && !normalized.includes('sft');
+}
+
+function resolveTaskInstruction(params: GenerationParams): string {
+  const taskType = normalizeGenerationTask(params.taskType);
+  const supplied = params.instruction?.trim();
+  const isGeneric = !supplied || supplied.startsWith('Fill the audio semantic mask');
+  if (!isGeneric) return supplied;
+  if (taskType === 'lego') {
+    return params.trackName
+      ? `Generate the ${params.trackName} track based on the audio context:`
+      : 'Generate the track based on the audio context:';
+  }
+  if (taskType === 'extract') {
+    return params.trackName
+      ? `Extract the ${params.trackName} track from the audio:`
+      : 'Extract the track from the audio:';
+  }
+  if (taskType === 'complete') {
+    return params.completeTrackClasses?.length
+      ? `Complete the input track with ${params.completeTrackClasses.join(', ')}:`
+      : 'Complete the input track:';
+  }
+  if (taskType === 'repaint') return 'Repaint the mask area based on the given conditions:';
+  if (taskType === 'cover') return 'Generate audio semantic tokens based on the given conditions:';
+  return supplied || 'Fill the audio semantic mask based on the given conditions:';
 }
 
 interface GenerationResult {
@@ -868,13 +913,43 @@ async function processGeneration(
   job.status = 'running';
   setJobProgressWindow(job, 'Starting generation...', 0.02, 0.03, 2);
 
-  // Guard: cover/audio2audio requires a source or audio codes
-  if ((params.taskType === 'cover' || params.taskType === 'audio2audio') && !params.sourceAudioUrl && !params.audioCodes) {
+  const resolvedTaskType = normalizeGenerationTask(params.taskType);
+
+  // Every audio transformation task needs source conditioning.
+  if (SOURCE_TASK_TYPES.has(resolvedTaskType) && !params.sourceAudioUrl && !params.audioCodes) {
     job.status = 'failed';
-    job.error = `task_type='${params.taskType}' requires a source audio or audio codes`;
+    job.error = `task_type='${resolvedTaskType}' requires a source audio or audio codes`;
+    return;
+  }
+  if (BASE_ONLY_TASK_TYPES.has(resolvedTaskType) && !isPureBaseModelId(params.ditModel)) {
+    job.status = 'failed';
+    job.error = `task_type='${resolvedTaskType}' requires an ACE-Step Base model`;
+    return;
+  }
+  if ((resolvedTaskType === 'lego' || resolvedTaskType === 'extract') && !params.trackName) {
+    job.status = 'failed';
+    job.error = `task_type='${resolvedTaskType}' requires trackName`;
+    return;
+  }
+  if (resolvedTaskType === 'complete' && !params.completeTrackClasses?.length) {
+    job.status = 'failed';
+    job.error = "task_type='complete' requires at least one completeTrackClasses value";
     return;
   }
 
+  if (params.recordingInstrument && resolvedTaskType === 'cover') {
+    await processRecordingInstrumentGeneration(jobId, params, job);
+    return;
+  }
+
+  await runGenerationBackend(jobId, params, job);
+}
+
+async function runGenerationBackend(
+  jobId: string,
+  params: GenerationParams,
+  job: ActiveJob,
+): Promise<void> {
   // Try Gradio first
   const gradioUp = await isGradioAvailable();
   if (gradioUp) {
@@ -889,6 +964,105 @@ async function processGeneration(
 
   // Fallback: Python spawn
   await processGenerationViaPython(jobId, params, job);
+}
+
+async function processRecordingInstrumentGeneration(
+  jobId: string,
+  params: GenerationParams,
+  job: ActiveJob,
+): Promise<void> {
+  try {
+    const requestedDuration = params.duration && params.duration > 0
+      ? Math.min(90, params.duration)
+      : undefined;
+
+    job.status = 'running';
+    job.progress = 0.04;
+    job.stage = 'Converting recording to instrument...';
+
+    const coverJob: ActiveJob = {
+      params,
+      startTime: Date.now(),
+      status: 'running',
+      progress: 0.04,
+      stage: job.stage,
+    };
+    await runGenerationBackend(`${jobId}_cover`, params, coverJob);
+
+    if (coverJob.status !== 'succeeded' || !coverJob.result?.audioUrls.length) {
+      throw new Error(coverJob.error || 'Recording cover generation failed');
+    }
+
+    const coverResult = coverJob.result;
+    const coverDuration = coverResult.duration > 0
+      ? coverResult.duration
+      : getAudioDuration(resolveAudioPath(coverResult.audioUrls[0]));
+    const targetDuration = requestedDuration ?? coverDuration;
+
+    if (!targetDuration || targetDuration <= coverDuration + 0.5) {
+      job.progress = 1;
+      job.status = 'succeeded';
+      job.stage = 'Completed';
+      job.result = coverResult;
+      job.rawResponse = { cover: coverJob.rawResponse };
+      return;
+    }
+
+    const extendedAudioUrls: string[] = [];
+    const extensionResponses: unknown[] = [];
+
+    for (let index = 0; index < coverResult.audioUrls.length; index += 1) {
+      const sourceAudioUrl = coverResult.audioUrls[index];
+      const repaintingStart = Math.max(0, coverDuration - 3);
+      const extensionParams: GenerationParams = {
+        ...params,
+        recordingInstrument: undefined,
+        taskType: 'repaint',
+        sourceAudioUrl,
+        sourceAudioTitle: params.sourceAudioTitle || `recording-cover-${index + 1}`,
+        duration: targetDuration,
+        batchSize: 1,
+        repaintingStart,
+        repaintingEnd: targetDuration,
+        instruction: 'Repaint the mask area based on the given conditions:',
+      };
+
+      job.progress = 0.45 + (index / coverResult.audioUrls.length) * 0.45;
+      job.stage = `Extending instrument clip ${index + 1}/${coverResult.audioUrls.length}...`;
+
+      const extensionJob: ActiveJob = {
+        params: extensionParams,
+        startTime: Date.now(),
+        status: 'running',
+        progress: job.progress,
+        stage: job.stage,
+      };
+      await runGenerationBackend(`${jobId}_extend_${index}`, extensionParams, extensionJob);
+
+      if (extensionJob.status !== 'succeeded' || !extensionJob.result?.audioUrls.length) {
+        throw new Error(extensionJob.error || 'Recording extension failed');
+      }
+
+      extendedAudioUrls.push(extensionJob.result.audioUrls[0]);
+      extensionResponses.push(extensionJob.rawResponse);
+    }
+
+    job.progress = 1;
+    job.progressWindow = undefined;
+    job.status = 'succeeded';
+    job.stage = 'Completed';
+    job.result = {
+      ...coverResult,
+      audioUrls: extendedAudioUrls,
+      duration: targetDuration,
+      status: 'succeeded',
+    };
+    job.rawResponse = { cover: coverJob.rawResponse, extensions: extensionResponses };
+  } catch (error) {
+    console.error(`Job ${jobId}: Recording instrument generation failed`, error);
+    job.status = 'failed';
+    job.error = error instanceof Error ? error.message : 'Recording instrument generation failed';
+  }
 }
 
 /**
@@ -1156,7 +1330,7 @@ async function processGenerationViaPython(
     if (params.seed !== undefined && params.seed >= 0 && !params.randomSeed) args.push('--seed', String(params.seed));
     
     if (params.shift !== undefined) args.push('--shift', String(params.shift));
-    const resolvedTaskType = params.taskType === 'audio2audio' ? 'cover' : params.taskType;
+    const resolvedTaskType = normalizeGenerationTask(params.taskType);
     if (resolvedTaskType && resolvedTaskType !== 'text2music') args.push('--task-type', resolvedTaskType);
 
     if (params.referenceAudioUrl) {
@@ -1168,12 +1342,12 @@ async function processGenerationViaPython(
     if (params.audioCodes) args.push('--audio-codes', params.audioCodes);
     if (params.repaintingStart !== undefined && params.repaintingStart > 0) args.push('--repainting-start', String(params.repaintingStart));
     if (params.repaintingEnd !== undefined && params.repaintingEnd > 0) args.push('--repainting-end', String(params.repaintingEnd));
-    if (params.taskType === 'cover' || params.taskType === 'repaint' || params.sourceAudioUrl) {
+    if (resolvedTaskType === 'cover' || resolvedTaskType === 'complete') {
       args.push('--audio-cover-strength', String(params.audioCoverStrength ?? 1.0));
     } else if (params.audioCoverStrength !== undefined && params.audioCoverStrength !== 1.0) {
       args.push('--audio-cover-strength', String(params.audioCoverStrength));
     }
-    if (params.instruction) args.push('--instruction', params.instruction);
+    args.push('--instruction', resolveTaskInstruction(params));
     if (effectiveThinking) args.push('--thinking');
     if (params.getLrc) args.push('--get-lrc');
     if (params.getScores) args.push('--get-scores', '--score-scale', String(params.scoreScale ?? 0.5));
@@ -1482,6 +1656,16 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
 export function getJobRawResponse(jobId: string): unknown | null {
   const job = activeJobs.get(jobId);
   return job?.rawResponse || null;
+}
+
+export function getActiveTemporaryRecordingUrls(): Set<string> {
+  const urls = new Set<string>();
+  for (const job of activeJobs.values()) {
+    if (job.status !== 'queued' && job.status !== 'running') continue;
+    const sourceUrl = job.params.sourceAudioUrl;
+    if (sourceUrl?.startsWith('/audio/temporary-recordings/')) urls.add(sourceUrl);
+  }
+  return urls;
 }
 
 // ---------------------------------------------------------------------------

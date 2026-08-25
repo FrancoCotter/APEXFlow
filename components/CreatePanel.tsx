@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Sparkles, ChevronDown, Settings2, Trash2, Music2, Sliders, Dices, Hash, RefreshCw, Plus, Upload, Play, Pause, Loader2 } from 'lucide-react';
+import { Sparkles, ChevronDown, Settings2, Trash2, Music2, Sliders, Dices, Hash, RefreshCw, Plus, Upload, Play, Pause, Loader2, Mic, Square } from 'lucide-react';
 import { GenerationParams, Song } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -54,6 +54,89 @@ const TRACK_NAMES = [
   'woodwinds', 'brass', 'fx', 'synth', 'strings', 'percussion',
   'keyboard', 'guitar', 'bass', 'drums', 'backing_vocals', 'vocals',
 ];
+
+const RECORDING_INSTRUMENTS = [
+  { value: 'grand piano', key: 'instrumentGrandPiano' },
+  { value: 'electric piano', key: 'instrumentElectricPiano' },
+  { value: 'organ', key: 'instrumentOrgan' },
+  { value: 'harpsichord', key: 'instrumentHarpsichord' },
+  { value: 'celesta', key: 'instrumentCelesta' },
+  { value: 'acoustic guitar', key: 'instrumentAcousticGuitar' },
+  { value: 'nylon-string guitar', key: 'instrumentNylonGuitar' },
+  { value: 'electric guitar', key: 'instrumentElectricGuitar' },
+  { value: 'distorted electric guitar', key: 'instrumentDistortedGuitar' },
+  { value: 'electric bass guitar', key: 'instrumentElectricBass' },
+  { value: 'upright bass', key: 'instrumentUprightBass' },
+  { value: 'harp', key: 'instrumentHarp' },
+  { value: 'violin', key: 'instrumentViolin' },
+  { value: 'viola', key: 'instrumentViola' },
+  { value: 'cello', key: 'instrumentCello' },
+  { value: 'double bass', key: 'instrumentDoubleBass' },
+  { value: 'string ensemble', key: 'instrumentStringEnsemble' },
+  { value: 'pizzicato strings', key: 'instrumentPizzicatoStrings' },
+  { value: 'flute', key: 'instrumentFlute' },
+  { value: 'clarinet', key: 'instrumentClarinet' },
+  { value: 'oboe', key: 'instrumentOboe' },
+  { value: 'bassoon', key: 'instrumentBassoon' },
+  { value: 'saxophone', key: 'instrumentSaxophone' },
+  { value: 'English horn', key: 'instrumentEnglishHorn' },
+  { value: 'trumpet', key: 'instrumentTrumpet' },
+  { value: 'trombone', key: 'instrumentTrombone' },
+  { value: 'French horn', key: 'instrumentFrenchHorn' },
+  { value: 'tuba', key: 'instrumentTuba' },
+  { value: 'brass ensemble', key: 'instrumentBrassEnsemble' },
+  { value: 'acoustic drums', key: 'instrumentAcousticDrums' },
+  { value: 'electronic drums', key: 'instrumentElectronicDrums' },
+  { value: 'drum machine', key: 'instrumentDrumMachine' },
+  { value: 'percussion', key: 'instrumentPercussion' },
+  { value: 'timpani', key: 'instrumentTimpani' },
+  { value: 'marimba', key: 'instrumentMarimba' },
+  { value: 'vibraphone', key: 'instrumentVibraphone' },
+  { value: 'xylophone', key: 'instrumentXylophone' },
+  { value: 'synth lead', key: 'instrumentSynthLead' },
+  { value: 'synth bass', key: 'instrumentSynthBass' },
+  { value: 'synth pad', key: 'instrumentSynthPad' },
+  { value: 'synth pluck', key: 'instrumentSynthPluck' },
+] as const;
+
+type AceTaskType = 'text2music' | 'cover' | 'repaint' | 'lego' | 'extract' | 'complete';
+
+const BASE_ONLY_TASKS = new Set<AceTaskType>(['lego', 'extract', 'complete']);
+const SOURCE_TASKS = new Set<AceTaskType>(['cover', 'repaint', 'lego', 'extract', 'complete']);
+const DEFAULT_INSTRUCTION = 'Fill the audio semantic mask based on the given conditions:';
+
+const normalizeTaskType = (task: string): AceTaskType => {
+  if (task === 'audio2audio') return 'cover';
+  if (SOURCE_TASKS.has(task as AceTaskType) || task === 'text2music') return task as AceTaskType;
+  return 'text2music';
+};
+
+const isPureBaseModel = (modelId: string): boolean => {
+  const normalized = modelId.toLowerCase();
+  const isBase = normalized.includes('base') || normalized.endsWith('-b') || normalized.includes('xl-b');
+  return isBase && !normalized.includes('turbo') && !normalized.includes('sft');
+};
+
+const taskInstruction = (task: AceTaskType, track: string, classes: string[]): string => {
+  if (task === 'lego') return track ? `Generate the ${track} track based on the audio context:` : 'Generate the track based on the audio context:';
+  if (task === 'extract') return track ? `Extract the ${track} track from the audio:` : 'Extract the track from the audio:';
+  if (task === 'complete') return classes.length
+    ? `Complete the input track with ${classes.join(', ')}:`
+    : 'Complete the input track:';
+  if (task === 'repaint') return 'Repaint the mask area based on the given conditions:';
+  if (task === 'cover') return 'Generate audio semantic tokens based on the given conditions:';
+  return DEFAULT_INSTRUCTION;
+};
+
+const looksLikeAutomaticInstruction = (value: string): boolean => {
+  const normalized = value.trim();
+  return normalized === DEFAULT_INSTRUCTION
+    || normalized === 'Generate audio semantic tokens based on the given conditions:'
+    || /^Generate the (.+ )?track based on the audio context:$/.test(normalized)
+    || /^Extract the (.+ )?track from the audio:$/.test(normalized)
+    || /^Complete the input track( with .+)?:$/.test(normalized)
+    || normalized === 'Repaint the mask area based on the given conditions:';
+};
 
 const shouldDefaultDcwOff = (modelId: string): boolean => {
   const normalized = modelId.toLowerCase();
@@ -142,6 +225,41 @@ const normalizeLyricsInput = (value: string): string => {
     .replace(/\\r/g, '\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n');
+};
+
+const encodePcmAsWav = (chunks: Float32Array[], sampleRate: number): Blob => {
+  const sampleCount = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const buffer = new ArrayBuffer(44 + sampleCount * 2);
+  const view = new DataView(buffer);
+  const writeText = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+
+  writeText(0, 'RIFF');
+  view.setUint32(4, 36 + sampleCount * 2, true);
+  writeText(8, 'WAVE');
+  writeText(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, 'data');
+  view.setUint32(40, sampleCount * 2, true);
+
+  let offset = 44;
+  chunks.forEach((chunk) => {
+    for (let index = 0; index < chunk.length; index += 1) {
+      const sample = Math.max(-1, Math.min(1, chunk[index]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      offset += 2;
+    }
+  });
+  return new Blob([buffer], { type: 'audio/wav' });
 };
 
 const CREATE_DRAFT_STORAGE_KEY = 'acestep_create_panel_draft';
@@ -262,7 +380,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [thinking, setThinking] = useState(() => initialDraft.thinking ?? false); // Default false for GPU compatibility
   const [enhance, setEnhance] = useState(() => initialDraft.enhance ?? false); // AI Enhance: uses LLM to enrich caption & generate metadata
   const [audioFormat, setAudioFormat] = useState<'mp3' | 'flac'>(() => initialDraft.audioFormat || 'mp3');
-  const [inferenceSteps, setInferenceSteps] = useState(() => initialDraft.inferenceSteps ?? 12);
+  const [inferenceSteps, setInferenceSteps] = useState(() => {
+    if (initialDraft.inferenceSteps !== undefined) return initialDraft.inferenceSteps;
+    const storedModel = localStorage.getItem('ace-model') || 'acestep-v15-turbo-shift3';
+    if (storedModel.toLowerCase().includes('turbo')) return 8;
+    return isPureBaseModel(storedModel) ? 32 : 50;
+  });
   const [inferMethod, setInferMethod] = useState<'ode' | 'sde'>(() => initialDraft.inferMethod || 'ode');
   const [lmBackend, setLmBackend] = useState<'pt' | 'vllm'>('pt');
   const [lmModel, setLmModel] = useState(() => {
@@ -283,12 +406,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [sourceAudioUrl, setSourceAudioUrl] = useState('');
   const [referenceAudioTitle, setReferenceAudioTitle] = useState('');
   const [sourceAudioTitle, setSourceAudioTitle] = useState('');
+  const [recordingInstrument, setRecordingInstrument] = useState('');
+  const [temporaryRecordingId, setTemporaryRecordingId] = useState<string | null>(null);
   const [audioCodes, setAudioCodes] = useState('');
   const [repaintingStart, setRepaintingStart] = useState(0);
   const [repaintingEnd, setRepaintingEnd] = useState(-1);
-  const [instruction, setInstruction] = useState('Fill the audio semantic mask based on the given conditions:');
+  const [instruction, setInstruction] = useState(DEFAULT_INSTRUCTION);
   const [audioCoverStrength, setAudioCoverStrength] = useState(1.0);
-  const [taskType, setTaskType] = useState('text2music');
+  const [taskType, setTaskType] = useState<AceTaskType>('text2music');
   const [useAdg, setUseAdg] = useState(() => initialDraft.useAdg ?? false);
   const [cfgIntervalStart, setCfgIntervalStart] = useState(0.0);
   const [cfgIntervalEnd, setCfgIntervalEnd] = useState(1.0);
@@ -427,6 +552,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [isTranscribingReference, setIsTranscribingReference] = useState(false);
   const transcribeAbortRef = useRef<AbortController | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [generationValidationError, setGenerationValidationError] = useState<string | null>(null);
   const [isFormattingStyle, setIsFormattingStyle] = useState(false);
   const [isFormattingLyrics, setIsFormattingLyrics] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
@@ -446,6 +572,78 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
   const [sourceTime, setSourceTime] = useState(0);
   const [referenceDuration, setReferenceDuration] = useState(0);
   const [sourceDuration, setSourceDuration] = useState(0);
+  const [sourceAudioOrigin, setSourceAudioOrigin] = useState<'recording' | null>(null);
+  const [recordingLyricsOverride, setRecordingLyricsOverride] = useState(false);
+  const [isRequestingMicrophone, setIsRequestingMicrophone] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const recordingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const recordingPcmChunksRef = useRef<Float32Array[]>([]);
+  const recordingSampleRateRef = useRef(44100);
+  const recordingProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const recordingStartedAtRef = useRef(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingAnimationRef = useRef<number | null>(null);
+  const recordingAudioContextRef = useRef<AudioContext | null>(null);
+  const recordingAnalyserRef = useRef<AnalyserNode | null>(null);
+
+  const canRecordAudio = typeof window !== 'undefined'
+    && window.location.protocol === 'https:'
+    && typeof navigator !== 'undefined'
+    && Boolean(navigator.mediaDevices?.getUserMedia)
+    && typeof AudioContext !== 'undefined';
+  const lyricsLockedForRecording = sourceAudioOrigin === 'recording'
+    && SOURCE_TASKS.has(normalizeTaskType(taskType))
+    && !recordingLyricsOverride;
+
+  const normalizedTaskType = normalizeTaskType(taskType);
+  const hasSourceConditioning = Boolean(sourceAudioUrl.trim() || audioCodes.trim());
+  const shouldHideCotControls = hasSourceConditioning
+    && (['cover', 'repaint', 'extract'] as AceTaskType[]).includes(normalizedTaskType);
+  const baseTaskModel = isPureBaseModel(selectedModel);
+  const availableSourceTasks = useMemo<AceTaskType[]>(
+    () => baseTaskModel ? ['lego', 'repaint', 'extract', 'complete'] : ['repaint'],
+    [baseTaskModel],
+  );
+
+  const getTaskLabel = (task: AceTaskType): string => {
+    if (task === 'lego') return t('legoTask');
+    if (task === 'repaint') return t('repaintTask');
+    if (task === 'extract') return t('extractTask');
+    if (task === 'complete') return t('completeTask');
+    if (task === 'text2music') return t('textToMusic');
+    return t('cover');
+  };
+
+  const getSourceHelp = (): string => {
+    if (normalizedTaskType === 'lego') return t('legoAudioHelp');
+    if (normalizedTaskType === 'repaint') return t('repaintAudioHelp');
+    if (normalizedTaskType === 'extract') return t('extractAudioHelp');
+    if (normalizedTaskType === 'complete') return t('completeAudioHelp');
+    return t('coverAudioHelp');
+  };
+
+  const changeTaskType = (nextTask: AceTaskType) => {
+    if (BASE_ONLY_TASKS.has(nextTask) && !baseTaskModel) return;
+    const selectedClasses = completeTrackClasses.split(',').map(item => item.trim()).filter(Boolean);
+    const nextInstruction = taskInstruction(nextTask, trackName, selectedClasses);
+    setInstruction(current => looksLikeAutomaticInstruction(current) ? nextInstruction : current);
+    setTaskType(nextTask);
+    setGenerationValidationError(null);
+    if (SOURCE_TASKS.has(nextTask)) setAudioTab('source');
+  };
+
+  const changeTrackName = (nextTrack: string) => {
+    const selectedClasses = completeTrackClasses.split(',').map(item => item.trim()).filter(Boolean);
+    setInstruction(current => looksLikeAutomaticInstruction(current)
+      ? taskInstruction(normalizedTaskType, nextTrack, selectedClasses)
+      : current);
+    setTrackName(nextTrack);
+    setGenerationValidationError(null);
+  };
 
   // Reference tracks modal state
   const [referenceTracks, setReferenceTracks] = useState<ReferenceTrack[]>([]);
@@ -647,7 +845,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         if (data.lm_top_k !== undefined) setLmTopK(data.lm_top_k);
         if (data.lm_top_p !== undefined) setLmTopP(data.lm_top_p);
         if (data.lm_negative_prompt !== undefined) setLmNegativePrompt(data.lm_negative_prompt);
-        if (data.task_type !== undefined) setTaskType(data.task_type);
+        if (data.task_type !== undefined) setTaskType(normalizeTaskType(String(data.task_type)));
         if (data.audio_codes !== undefined) setAudioCodes(data.audio_codes);
         if (data.repainting_start !== undefined) setRepaintingStart(data.repainting_start);
         if (data.repainting_end !== undefined) setRepaintingEnd(data.repainting_end);
@@ -752,6 +950,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
             ? params.source_audio_url
             : ''
       );
+      setSourceAudioOrigin(null);
+      setRecordingLyricsOverride(false);
       setReferenceAudioTitle(
         typeof params.referenceAudioTitle === 'string'
           ? params.referenceAudioTitle
@@ -774,7 +974,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
             : 1.0
       );
 
-      setTaskType(typeof reusedTaskType === 'string' ? reusedTaskType : 'text2music');
+      setTaskType(typeof reusedTaskType === 'string' ? normalizeTaskType(reusedTaskType) : 'text2music');
       if (typeof reusedModel === 'string' && reusedModel.length > 0) {
         setSelectedModel(reusedModel);
         localStorage.setItem('ace-model', reusedModel);
@@ -975,13 +1175,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     prevIsGeneratingRef.current = isGenerating;
   }, [isGenerating, refreshModels]);
 
-  const activeMaxDuration = thinking ? maxDurationWithLm : maxDurationWithoutLm;
+  const modelMaxDuration = thinking ? maxDurationWithLm : maxDurationWithoutLm;
+  const activeMaxDuration = sourceAudioOrigin === 'recording'
+    ? Math.min(90, modelMaxDuration)
+    : modelMaxDuration;
 
   useEffect(() => {
     if (duration > activeMaxDuration) {
       setDuration(activeMaxDuration);
     }
   }, [duration, activeMaxDuration]);
+
+  useEffect(() => {
+    if (!hasSourceConditioning && SOURCE_TASKS.has(normalizedTaskType)) {
+      changeTaskType('text2music');
+    }
+  }, [hasSourceConditioning, normalizedTaskType]);
 
   useEffect(() => {
     const getDragKind = (e: DragEvent): 'file' | 'audio' | null => {
@@ -1146,6 +1355,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     setKeyScale('');
     setTimeSignature('');
     setThinking(false);
+    setTaskType('text2music');
+    setInstruction(DEFAULT_INSTRUCTION);
+    setGenerationValidationError(null);
     setCustomExampleSnapshot(null);
   };
 
@@ -1228,10 +1440,31 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     }
   }, [token]);
 
-  const uploadReferenceTrack = async (file: File, target?: 'reference' | 'source') => {
+  const deleteTemporaryRecording = async (recordingId: string, clearCurrent = true) => {
+    if (!token) return;
+    try {
+      await fetch(`/api/reference-tracks/recording/${encodeURIComponent(recordingId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (error) {
+      console.warn('[Recording] Temporary cleanup will be retried by the server:', error);
+    } finally {
+      if (clearCurrent) {
+        setTemporaryRecordingId(current => current === recordingId ? null : current);
+      }
+    }
+  };
+
+  const uploadReferenceTrack = async (
+    file: File,
+    target?: 'reference' | 'source',
+    options?: { transcribe?: boolean; origin?: 'recording' },
+  ): Promise<boolean> => {
     if (!token) {
-      setUploadError('Please sign in to upload audio.');
-      return;
+      if (options?.origin === 'recording') setRecordingError(t('recordingSignInRequired'));
+      else setUploadError('Please sign in to upload audio.');
+      return false;
     }
     setUploadError(null);
     setIsUploadingReference(true);
@@ -1239,31 +1472,45 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       const formData = new FormData();
       formData.append('audio', file);
 
-      const response = await fetch('/api/reference-tracks', {
+      const isTemporaryRecording = options?.origin === 'recording';
+      const response = await fetch(
+        isTemporaryRecording ? '/api/reference-tracks/recording' : '/api/reference-tracks',
+        {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData
-      });
+        },
+      );
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.error || 'Upload failed');
+        throw new Error(err.details || err.error || 'Upload failed');
       }
 
       const data = await response.json();
-      setReferenceTracks(prev => [data.track, ...prev]);
+      if (isTemporaryRecording) {
+        if (temporaryRecordingId && temporaryRecordingId !== data.recording_id && !isGenerating) {
+          void deleteTemporaryRecording(temporaryRecordingId, false);
+        }
+        setTemporaryRecordingId(data.recording_id);
+      } else {
+        setReferenceTracks(prev => [data.track, ...prev]);
+      }
 
       // Also set as current reference/source
       const selectedTarget = target ?? audioModalTarget;
-      applyAudioTargetUrl(selectedTarget, data.track.audio_url, data.track.filename);
-      if (data.whisper_available && data.track?.id) {
+      applyAudioTargetUrl(selectedTarget, data.track.audio_url, data.track.filename, options?.origin ?? null);
+      if (options?.transcribe !== false && data.whisper_available && data.track?.id) {
         void transcribeReferenceTrack(data.track.id).then(() => undefined);
       } else {
         setShowAudioModal(false);
       }
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Upload failed';
-      setUploadError(message);
+      if (options?.origin === 'recording') setRecordingError(message);
+      else setUploadError(message);
+      return false;
     } finally {
       setIsUploadingReference(false);
     }
@@ -1360,7 +1607,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
     setTempAudioUrl('');
   };
 
-  const applyAudioTargetUrl = (target: 'reference' | 'source', url: string, title?: string) => {
+  const applyAudioTargetUrl = (
+    target: 'reference' | 'source',
+    url: string,
+    title?: string,
+    origin: 'recording' | null = null,
+  ) => {
     const derivedTitle = title ? title.replace(/\.[^/.]+$/, '') : getAudioLabel(url);
     if (target === 'reference') {
       setReferenceAudioUrl(url);
@@ -1368,15 +1620,217 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       setReferenceTime(0);
       setReferenceDuration(0);
     } else {
+      if (origin !== 'recording' && temporaryRecordingId) {
+        if (!isGenerating) void deleteTemporaryRecording(temporaryRecordingId);
+        setTemporaryRecordingId(null);
+      }
       setSourceAudioUrl(url);
       setSourceAudioTitle(derivedTitle);
+      setSourceAudioOrigin(origin);
+      setRecordingLyricsOverride(false);
+      setRecordingError(null);
       setSourceTime(0);
       setSourceDuration(0);
-      if (taskType === 'text2music') {
-        setTaskType('cover');
+      if (origin === 'recording') {
+        changeTaskType('cover');
+      } else {
+        setRecordingInstrument('');
+      }
+      if (origin !== 'recording' && taskType === 'text2music') {
+        changeTaskType('cover');
       }
     }
   };
+
+  const clearSourceAudio = () => {
+    if (temporaryRecordingId) {
+      if (!isGenerating) void deleteTemporaryRecording(temporaryRecordingId);
+      setTemporaryRecordingId(null);
+    }
+    setSourceAudioUrl('');
+    setSourceAudioTitle('');
+    setSourceAudioOrigin(null);
+    setRecordingInstrument('');
+    setRecordingLyricsOverride(false);
+    setSourcePlaying(false);
+    setSourceTime(0);
+    setSourceDuration(0);
+    setGenerationValidationError(null);
+    if (!audioCodes.trim()) changeTaskType('text2music');
+  };
+
+  const releaseMicrophone = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (recordingAnimationRef.current !== null) {
+      cancelAnimationFrame(recordingAnimationRef.current);
+      recordingAnimationRef.current = null;
+    }
+    microphoneStreamRef.current?.getTracks().forEach(track => track.stop());
+    microphoneStreamRef.current = null;
+    if (recordingProcessorRef.current) {
+      recordingProcessorRef.current.onaudioprocess = null;
+      recordingProcessorRef.current.disconnect();
+      recordingProcessorRef.current = null;
+    }
+    if (recordingAudioContextRef.current) {
+      void recordingAudioContextRef.current.close().catch(() => undefined);
+      recordingAudioContextRef.current = null;
+    }
+    recordingAnalyserRef.current = null;
+  };
+
+  const drawRecordingWaveform = (analyser: AnalyserNode) => {
+    const canvas = recordingCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const samples = new Uint8Array(analyser.fftSize);
+
+    const draw = () => {
+      const ratio = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.floor(canvas.clientWidth * ratio));
+      const height = Math.max(1, Math.floor(canvas.clientHeight * ratio));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      analyser.getByteTimeDomainData(samples);
+      context.clearRect(0, 0, width, height);
+      context.lineWidth = Math.max(2, ratio * 1.5);
+      context.strokeStyle = '#8fb68f';
+      context.beginPath();
+      const sliceWidth = width / samples.length;
+      for (let index = 0; index < samples.length; index += 1) {
+        const x = index * sliceWidth;
+        const y = (samples[index] / 255) * height;
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      }
+      context.stroke();
+      recordingAnimationRef.current = requestAnimationFrame(draw);
+    };
+
+    draw();
+  };
+
+  const startRecording = async () => {
+    if (!canRecordAudio || isRequestingMicrophone || isRecording || isUploadingRecording) return;
+    if (!token) {
+      setRecordingError(t('recordingSignInRequired'));
+      return;
+    }
+    setRecordingError(null);
+    setIsRequestingMicrophone(true);
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'OverconstrainedError') {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } else {
+          throw error;
+        }
+      }
+      microphoneStreamRef.current = stream;
+
+      const audioContext = new AudioContext();
+      recordingAudioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      recordingAnalyserRef.current = analyser;
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      recordingProcessorRef.current = processor;
+      recordingPcmChunksRef.current = [];
+      recordingSampleRateRef.current = audioContext.sampleRate;
+      processor.onaudioprocess = (event) => {
+        recordingPcmChunksRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      };
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
+      recordingStartedAtRef.current = Date.now();
+      setRecordingElapsed(0);
+      setIsRecording(true);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingElapsed((Date.now() - recordingStartedAtRef.current) / 1000);
+      }, 100);
+    } catch (error) {
+      const denied = error instanceof DOMException
+        && (error.name === 'NotAllowedError' || error.name === 'SecurityError');
+      const unavailable = error instanceof DOMException
+        && (error.name === 'NotReadableError' || error.name === 'AbortError');
+      console.error('[Recording] Failed to start:', error);
+      setRecordingError(t(denied
+        ? 'microphonePermissionDenied'
+        : unavailable
+          ? 'microphoneDeviceUnavailable'
+          : 'microphoneUnavailable'));
+      releaseMicrophone();
+    } finally {
+      setIsRequestingMicrophone(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!isRecording) return;
+    const elapsed = (Date.now() - recordingStartedAtRef.current) / 1000;
+    const chunks = recordingPcmChunksRef.current;
+    recordingPcmChunksRef.current = [];
+    setIsRecording(false);
+    releaseMicrophone();
+    if (elapsed < 0.5 || chunks.length === 0) {
+      setRecordingError(t('recordingTooShort'));
+      return;
+    }
+
+    const blob = encodePcmAsWav(chunks, recordingSampleRateRef.current);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const file = new File([blob], `recording-${timestamp}.wav`, { type: 'audio/wav' });
+    setIsUploadingRecording(true);
+    try {
+      const uploaded = await uploadReferenceTrack(file, 'source', { transcribe: false, origin: 'recording' });
+      if (!uploaded) return;
+    } catch (error) {
+      console.error('[Recording] Failed to save:', error);
+      setRecordingError(error instanceof Error ? error.message : t('recordingUploadFailed'));
+    } finally {
+      setIsUploadingRecording(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isRecording || !recordingAnalyserRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      if (recordingAnalyserRef.current) drawRecordingWaveform(recordingAnalyserRef.current);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (recordingAnimationRef.current !== null) {
+        cancelAnimationFrame(recordingAnimationRef.current);
+        recordingAnimationRef.current = null;
+      }
+    };
+  }, [isRecording]);
+
+  useEffect(() => () => {
+    releaseMicrophone();
+  }, []);
 
   const formatTime = (time: number) => {
     if (!Number.isFinite(time) || time <= 0) return '0:00';
@@ -1443,9 +1897,45 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
       const trimmed = style.trim();
       return trimmed ? `${trimmed}\n${genderHint}` : genderHint;
     })();
-    const submissionLyrics = customMode ? normalizedLyrics : '';
-    const submissionStyle = customMode ? styleWithGender : '';
-    const submissionInstrumental = instrumental;
+    const isRecordingSource = sourceAudioOrigin === 'recording';
+    const recordingStyle = [recordingInstrument, style.trim()].filter(Boolean).join(', ');
+    const submissionLyrics = customMode && !lyricsLockedForRecording ? normalizedLyrics : '';
+    const submissionStyle = customMode ? (isRecordingSource ? recordingStyle : styleWithGender) : '';
+    const submissionInstrumental = isRecordingSource ? true : instrumental;
+    const effectiveTaskType: AceTaskType = isRecordingSource
+      ? 'cover'
+      : (customMode ? normalizedTaskType : 'text2music');
+    const selectedCompleteClasses = completeTrackClasses.split(',').map(item => item.trim()).filter(Boolean);
+
+    setGenerationValidationError(null);
+    if (SOURCE_TASKS.has(effectiveTaskType) && !sourceAudioUrl.trim() && !audioCodes.trim()) {
+      setGenerationValidationError(t('sourceAudioRequired'));
+      return;
+    }
+    if (isRecordingSource && !recordingInstrument) {
+      setGenerationValidationError(t('recordingInstrumentRequired'));
+      return;
+    }
+    if (isRecordingSource && duration > 90) {
+      setGenerationValidationError(t('recordingDurationLimit'));
+      return;
+    }
+    if (BASE_ONLY_TASKS.has(effectiveTaskType) && !baseTaskModel) {
+      setGenerationValidationError(t('baseModelRequired'));
+      return;
+    }
+    if ((effectiveTaskType === 'lego' || effectiveTaskType === 'extract') && !trackName) {
+      setGenerationValidationError(t('trackSelectionRequired'));
+      return;
+    }
+    if (effectiveTaskType === 'complete' && selectedCompleteClasses.length === 0) {
+      setGenerationValidationError(t('completeTracksRequired'));
+      return;
+    }
+
+    const effectiveInstruction = looksLikeAutomaticInstruction(instruction)
+      ? taskInstruction(effectiveTaskType, trackName, selectedCompleteClasses)
+      : instruction;
 
     // Bulk generation: loop bulkCount times
     for (let i = 0; i < bulkCount; i++) {
@@ -1490,16 +1980,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         lmTopP,
         lmNegativePrompt,
         referenceAudioUrl: referenceAudioUrl.trim() || undefined,
-        sourceAudioUrl: sourceAudioUrl.trim() || undefined,
+        sourceAudioUrl: SOURCE_TASKS.has(effectiveTaskType) ? sourceAudioUrl.trim() || undefined : undefined,
         referenceAudioTitle: referenceAudioTitle.trim() || undefined,
         sourceAudioTitle: sourceAudioTitle.trim() || undefined,
+        recordingInstrument: isRecordingSource ? recordingInstrument : undefined,
         audioCodes: audioCodes.trim() || undefined,
-        repaintingStart,
-        repaintingEnd,
-        instruction,
-        audioCoverStrength,
-        taskType,
-        useAdg,
+        repaintingStart: effectiveTaskType === 'repaint' || effectiveTaskType === 'lego' ? repaintingStart : undefined,
+        repaintingEnd: effectiveTaskType === 'repaint' || effectiveTaskType === 'lego' ? repaintingEnd : undefined,
+        instruction: effectiveInstruction,
+        audioCoverStrength: effectiveTaskType === 'cover' || effectiveTaskType === 'complete' ? audioCoverStrength : undefined,
+        taskType: effectiveTaskType,
+        useAdg: isTurboModel(selectedModel) ? false : useAdg,
         cfgIntervalStart,
         cfgIntervalEnd,
         customTimesteps: customTimesteps.trim() || undefined,
@@ -1513,14 +2004,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
         getLrc,
         scoreScale,
         lmBatchChunkSize,
-        trackName: trackName.trim() || undefined,
-        completeTrackClasses: (() => {
-          const parsed = completeTrackClasses
-            .split(',')
-            .map((item) => item.trim())
-            .filter(Boolean);
-          return parsed.length ? parsed : undefined;
-        })(),
+        trackName: effectiveTaskType === 'lego' || effectiveTaskType === 'extract' ? trackName.trim() || undefined : undefined,
+        completeTrackClasses: effectiveTaskType === 'complete' ? selectedCompleteClasses : undefined,
         isFormatCaption,
         loraLoaded,
         dcwEnabled,
@@ -1652,9 +2137,15 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                           if (isTurboModel(model.id)) {
                             setInferenceSteps(8);
                             setUseAdg(false);
-                          } else {
-                            setInferenceSteps(prev => Math.max(prev, 50));
+                          } else if (isPureBaseModel(model.id)) {
+                            setInferenceSteps(32);
                             setUseAdg(true);
+                          } else {
+                            setInferenceSteps(50);
+                            setUseAdg(true);
+                          }
+                          if (!isPureBaseModel(model.id) && BASE_ONLY_TASKS.has(normalizedTaskType)) {
+                            changeTaskType('cover');
                           }
                           setDcwEnabled(!shouldDefaultDcwOff(model.id));
                           setShowModelMenu(false);
@@ -1841,6 +2332,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                 formatDisplay={(val) => val === -1 ? t('auto') : `${val}${t('seconds')}`}
                 title={''}
                 autoLabel={t('auto')}
+                helpText={sourceAudioOrigin === 'recording' ? t('recordingDurationHelp') : undefined}
               />
 
               {/* BPM */}
@@ -1927,7 +2419,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   <div className="flex items-center gap-1 bg-zinc-200/50 dark:bg-black/30 rounded-lg p-0.5">
                     <button
                       type="button"
-                      onClick={() => setAudioTab('reference')}
+                      onClick={() => {
+                        setAudioTab('reference');
+                      }}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                         audioTab === 'reference'
                           ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm'
@@ -1938,14 +2432,16 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAudioTab('source')}
+                      onClick={() => {
+                        setAudioTab('source');
+                      }}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                         audioTab === 'source'
                           ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm'
                           : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
                       }`}
                     >
-                      {t('cover')}
+                      {normalizedTaskType === 'text2music' ? t('cover') : getTaskLabel(normalizedTaskType)}
                     </button>
                   </div>
                 </div>
@@ -2057,15 +2553,93 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => { setSourceAudioUrl(''); setSourceAudioTitle(''); setSourcePlaying(false); setSourceTime(0); setSourceDuration(0); }}
+                      onClick={clearSourceAudio}
                       className="p-1.5 rounded-full hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-400 hover:text-zinc-600 dark:hover:text-white transition-colors"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                   </div>
+                    {sourceAudioOrigin === 'recording' ? (
+                      <div className="px-1 pt-1 space-y-1.5">
+                        <label className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
+                          {t('targetInstrument')}
+                        </label>
+                        <select
+                          value={recordingInstrument}
+                          onChange={(event) => {
+                            setRecordingInstrument(event.target.value);
+                            setGenerationValidationError(null);
+                          }}
+                          className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-900 focus:outline-none dark:border-white/10 dark:bg-black/20 dark:text-white"
+                        >
+                          <option value="">{t('selectInstrument')}</option>
+                          {RECORDING_INSTRUMENTS.map((instrument) => (
+                            <option key={instrument.value} value={instrument.value}>
+                              {t(instrument.key)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="px-1 pt-1 space-y-1.5">
+                        <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">{t('useSourceAs')}</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {availableSourceTasks.map((sourceTask) => {
+                            const isActive = normalizedTaskType === sourceTask;
+                            return (
+                              <button
+                                key={sourceTask}
+                                type="button"
+                                onClick={() => changeTaskType(isActive ? 'cover' : sourceTask)}
+                                className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                                  isActive
+                                    ? 'border-[#8fb68f] bg-[#8fb68f]/20 text-zinc-900 dark:text-[#b9d4b9]'
+                                    : 'border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/[0.03] text-zinc-500 dark:text-zinc-400 hover:border-[#8fb68f]/60'
+                                }`}
+                              >
+                                {getTaskLabel(sourceTask)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <p className="px-1 text-[10px] leading-relaxed text-zinc-400 dark:text-zinc-500">
-                      {t('coverAudioHelp')}
+                      {sourceAudioOrigin === 'recording' ? t('recordingInstrumentHelp') : getSourceHelp()}
                     </p>
+                  </div>
+                )}
+
+                {audioTab === 'source' && (isRequestingMicrophone || isRecording || isUploadingRecording || recordingError) && (
+                  <div className={`rounded-lg border px-3 py-2.5 ${
+                    recordingError
+                      ? 'border-amber-300/60 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5'
+                      : 'border-[#8fb68f]/40 bg-[#8fb68f]/10'
+                  }`}>
+                    {isRecording && (
+                      <div className="flex items-center gap-3">
+                        <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-rose-500" />
+                        <canvas ref={recordingCanvasRef} className="h-10 min-w-0 flex-1" />
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">
+                          {formatTime(recordingElapsed)}
+                        </span>
+                      </div>
+                    )}
+                    {isRequestingMicrophone && (
+                      <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>{t('preparingMicrophone')}</span>
+                      </div>
+                    )}
+                    {isUploadingRecording && (
+                      <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>{t('uploadingRecording')}</span>
+                      </div>
+                    )}
+                    {recordingError && (
+                      <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">{recordingError}</p>
+                    )}
                   </div>
                 )}
 
@@ -2074,7 +2648,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   <button
                     type="button"
                     onClick={() => openAudioModal(audioTab, 'uploads')}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 px-3 py-2 text-xs font-medium transition-colors border border-zinc-200 dark:border-white/5"
+                    disabled={isRecording || isRequestingMicrophone || isUploadingRecording}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 px-3 py-2 text-xs font-medium transition-colors border border-zinc-200 dark:border-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
@@ -2087,13 +2662,29 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                       const input = audioTab === 'reference' ? referenceInputRef.current : sourceInputRef.current;
                       input?.click();
                     }}
-                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 px-3 py-2 text-xs font-medium transition-colors border border-zinc-200 dark:border-white/5"
+                    disabled={isRecording || isRequestingMicrophone || isUploadingRecording}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 px-3 py-2 text-xs font-medium transition-colors border border-zinc-200 dark:border-white/5 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                     </svg>
                     {t('upload')}
                   </button>
+                  {audioTab === 'source' && canRecordAudio && (
+                    <button
+                      type="button"
+                      onClick={isRecording ? stopRecording : () => void startRecording()}
+                      disabled={isRequestingMicrophone || isUploadingRecording}
+                      className={`shrink-0 flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        isRecording
+                          ? 'border-rose-400/50 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 dark:text-rose-300'
+                          : 'border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:border-white/5 dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      {isRecording ? <Square size={13} fill="currentColor" /> : <Mic size={14} />}
+                      <span>{isRecording ? t('stopRecording') : t('record')}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -2107,9 +2698,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               <div className="flex items-center justify-between px-3 py-2.5 bg-zinc-50 dark:bg-white/5 border-b border-zinc-100 dark:border-white/5 flex-shrink-0">
                 <div>
                   <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('lyrics')}</span>
-                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">{t('leaveLyricsEmpty')}</p>
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                    {lyricsLockedForRecording ? t('recordingLyricsLockedTitle') : t('leaveLyricsEmpty')}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
+                {!lyricsLockedForRecording && <div className="flex items-center gap-2">
                   <button
                     className={`p-1.5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded transition-colors ${isLoadingRandomExample ? 'text-[#8fb68f]' : 'text-zinc-500 hover:text-black dark:hover:text-white'}`}
                     title={t('loadRandomTextToMusicExample')}
@@ -2142,24 +2735,41 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   >
                     <Trash2 size={14} />
                   </button>
+                </div>}
+              </div>
+              {lyricsLockedForRecording ? (
+                <div className="flex flex-col items-start gap-3 px-3 py-4">
+                  <div className="flex items-start gap-2.5 text-zinc-600 dark:text-zinc-300">
+                    <Mic size={16} className="mt-0.5 shrink-0 text-[#8fb68f]" />
+                    <p className="text-xs leading-relaxed">{t('recordingLyricsLockedHelp')}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRecordingLyricsOverride(true)}
+                    className="rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-300 dark:hover:bg-white/[0.07]"
+                  >
+                    {t('useLyricsAnyway')}
+                  </button>
                 </div>
-              </div>
-              <textarea
-                disabled={instrumental || isFormattingLyrics}
-                value={lyrics}
-                onChange={(e) => handleLyricsChange(e.target.value)}
-                placeholder={instrumental ? t('instrumentalModePlaceholder') : t('lyricsPlaceholder')}
-                className={`w-full bg-transparent p-3 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none resize-none font-mono leading-relaxed ${instrumental ? 'opacity-30 cursor-not-allowed' : ''} ${isFormattingLyrics ? 'cursor-not-allowed' : ''}`}
-                style={{ height: `${lyricsHeight}px` }}
-              />
-              {/* Resize Handle */}
-              <div
-                onMouseDown={startResizing}
-                className="h-3 w-full cursor-ns-resize flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors absolute bottom-0 left-0 z-10"
-              >
-                <div className="w-8 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
-              </div>
-              {isFormattingLyrics && (
+              ) : (
+                <>
+                  <textarea
+                    disabled={instrumental || isFormattingLyrics}
+                    value={lyrics}
+                    onChange={(e) => handleLyricsChange(e.target.value)}
+                    placeholder={instrumental ? t('instrumentalModePlaceholder') : t('lyricsPlaceholder')}
+                    className={`w-full bg-transparent p-3 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-600 focus:outline-none resize-none font-mono leading-relaxed ${instrumental ? 'opacity-30 cursor-not-allowed' : ''} ${isFormattingLyrics ? 'cursor-not-allowed' : ''}`}
+                    style={{ height: `${lyricsHeight}px` }}
+                  />
+                  <div
+                    onMouseDown={startResizing}
+                    className="h-3 w-full cursor-ns-resize flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors absolute bottom-0 left-0 z-10"
+                  >
+                    <div className="w-8 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                  </div>
+                </>
+              )}
+              {!lyricsLockedForRecording && isFormattingLyrics && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/65 dark:bg-black/55 backdrop-blur-[2px]">
                   <div className="flex items-center gap-2 rounded-full border border-zinc-200 dark:border-white/10 bg-white/80 dark:bg-zinc-900/80 px-4 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-200 shadow-lg">
                     <Loader2 size={14} className="animate-spin text-[#8fb68f]" />
@@ -2495,12 +3105,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               label={t('duration')}
               value={duration}
               min={-1}
-              max={600}
+              max={activeMaxDuration}
               step={5}
               onChange={setDuration}
               formatDisplay={(val) => val === -1 ? t('auto') : `${val}${t('seconds')}`}
               autoLabel={t('auto')}
-              helpText={`${t('auto')} - 10 ${t('min')}`}
+              helpText={sourceAudioOrigin === 'recording'
+                ? t('recordingDurationHelp')
+                : `${t('auto')} - 10 ${t('min')}`}
             />
 
             {/* Batch Size */}
@@ -2553,18 +3165,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               title={t('inferenceStepsTooltip')}
             />
 
-            {/* Guidance Scale */}
-            <EditableSlider
-              label={t('guidanceScale')}
-              value={guidanceScale}
-              min={1}
-              max={15}
-              step={0.1}
-              onChange={setGuidanceScale}
-              formatDisplay={(val) => val.toFixed(1)}
-              helpText={t('howCloselyFollowPrompt')}
-              title={t('guidanceScaleTooltip')}
-            />
+            {/* Turbo variants do not use CFG guidance controls. */}
+            {!isTurboModel(selectedModel) && (
+              <EditableSlider
+                label={t('guidanceScale')}
+                value={guidanceScale}
+                min={1}
+                max={15}
+                step={0.1}
+                onChange={setGuidanceScale}
+                formatDisplay={(val) => val.toFixed(1)}
+                helpText={t('howCloselyFollowPrompt')}
+                title={t('guidanceScaleTooltip')}
+              />
+            )}
             {/* DCW Settings Section */}
             <div className="grid space-y-1.5">
               {/* <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
@@ -2927,33 +3541,43 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('taskTypeTooltip')}>{t('taskType')}</label>
                 <select
-                  value={taskType}
-                  onChange={(e) => setTaskType(e.target.value)}
+                  value={normalizedTaskType}
+                  onChange={(e) => changeTaskType(normalizeTaskType(e.target.value))}
+                  disabled={sourceAudioOrigin === 'recording'}
                   className={selectClassName}
                 >
                   <option value="text2music">{t('textToMusic')}</option>
-                  <option value="audio2audio">{t('audio2audio')}</option>
                   <option value="cover">{t('coverTask')}</option>
                   <option value="repaint">{t('repaintTask')}</option>
+                  {baseTaskModel && <option value="lego">{t('legoTask')}</option>}
+                  {baseTaskModel && <option value="extract">{t('extractTask')}</option>}
+                  {baseTaskModel && <option value="complete">{t('completeTask')}</option>}
+                  {!baseTaskModel && BASE_ONLY_TASKS.has(normalizedTaskType) && (
+                    <option value={normalizedTaskType} disabled>{getTaskLabel(normalizedTaskType)} — {t('baseOnly')}</option>
+                  )}
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('audioCoverStrengthTooltip')}>{t('audioCoverStrength')}</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                  value={audioCoverStrength}
-                  onChange={(e) => setAudioCoverStrength(Number(e.target.value))}
-                  className="w-full bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none"
-                />
-              </div>
+              {(normalizedTaskType === 'cover' || normalizedTaskType === 'complete') && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('audioCoverStrengthTooltip')}>{t('audioCoverStrength')}</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    value={audioCoverStrength}
+                    onChange={(e) => setAudioCoverStrength(Number(e.target.value))}
+                    className="w-full bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {(normalizedTaskType === 'repaint' || normalizedTaskType === 'lego') && <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('repaintingStartTooltip')}>{t('repaintingStart')}</label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('repaintingStartTooltip')}>
+                  {normalizedTaskType === 'lego' ? t('stemStart') : t('repaintingStart')}
+                </label>
                 <input
                   type="number"
                   step="0.1"
@@ -2963,7 +3587,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('repaintingEndTooltip')}>{t('repaintingEnd')}</label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('repaintingEndTooltip')}>
+                  {normalizedTaskType === 'lego' ? t('stemEnd') : t('repaintingEnd')}
+                </label>
                 <input
                   type="number"
                   step="0.1"
@@ -2972,7 +3598,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   className="w-full bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none"
                 />
               </div>
-            </div>
+            </div>}
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('instructionTooltip')}>{t('instruction')}</label>
@@ -2983,11 +3609,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               />
             </div>
 
-            <div className="space-y-1">
-              <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('guidance')}</h4>
-              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{t('advancedCfgScheduling')}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            {!isTurboModel(selectedModel) && <>
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('guidance')}</h4>
+                <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{t('advancedCfgScheduling')}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('cfgIntervalStartTooltip')}>{t('cfgIntervalStart')}</label>
                 <input
@@ -3012,7 +3639,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   className="w-full bg-zinc-50 dark:bg-black/20 border border-zinc-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none"
                 />
               </div>
-            </div>
+              </div>
+            </>}
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400" title={t('customTimestepsTooltip')}>{t('customTimesteps')}</label>
@@ -3052,21 +3680,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('trackName')}</label>
+            {(normalizedTaskType === 'lego' || normalizedTaskType === 'extract') && <div className="space-y-1.5">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                {normalizedTaskType === 'lego' ? t('trackToAdd') : t('trackToExtract')}
+              </label>
               <select
                 value={trackName}
-                onChange={(e) => setTrackName(e.target.value)}
+                onChange={(e) => changeTrackName(e.target.value)}
                 className={selectClassName}
               >
-                <option value="">None</option>
+                <option value="">{t('none')}</option>
                 {TRACK_NAMES.map(name => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
-            </div>
+            </div>}
 
-            <div className="space-y-1.5">
+            {normalizedTaskType === 'complete' && <div className="space-y-1.5">
               <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('completeTrackClasses')}</label>
               <div className="flex flex-wrap gap-2">
                 {TRACK_NAMES.map(name => {
@@ -3081,7 +3711,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                           const next = isChecked
                             ? selected.filter(s => s !== name)
                             : [...selected, name];
+                          setInstruction(current => looksLikeAutomaticInstruction(current)
+                            ? taskInstruction('complete', trackName, next)
+                            : current);
                           setCompleteTrackClasses(next.join(','));
+                          setGenerationValidationError(null);
                         }}
                         className={checkboxClassName}
                       />
@@ -3090,32 +3724,36 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
                   );
                 })}
               </div>
-            </div>
+            </div>}
 
             <div className="grid grid-cols-2 gap-3">
-              <label
-                className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400"
-                title="Adaptive Dual Guidance: dynamically adjusts CFG for quality. Base model only; slower."
-              >
-                <input type="checkbox" checked={useAdg} onChange={() => setUseAdg(!useAdg)} className={checkboxClassName} />
-                {t('useAdg')}
-              </label>
+              {!isTurboModel(selectedModel) && (
+                <label
+                  className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400"
+                  title="Adaptive Dual Guidance: dynamically adjusts CFG for quality. Base model only; slower."
+                >
+                  <input type="checkbox" checked={useAdg} onChange={() => setUseAdg(!useAdg)} className={checkboxClassName} />
+                  {t('useAdg')}
+                </label>
+              )}
               <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Allow the LM to run in larger batches for speed (more VRAM).">
                 <input type="checkbox" checked={allowLmBatch} onChange={() => setAllowLmBatch(!allowLmBatch)} className={checkboxClassName} />
                 {t('allowLmBatch')}
               </label>
-              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about metadata like BPM, key, duration.">
-                <input type="checkbox" checked={useCotMetas} onChange={() => setUseCotMetas(!useCotMetas)} className={checkboxClassName} />
-                {t('useCotMetas')}
-              </label>
-              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about the caption/style text.">
-                <input type="checkbox" checked={useCotCaption} onChange={() => setUseCotCaption(!useCotCaption)} className={checkboxClassName} />
-                {t('useCotCaption')}
-              </label>
-              <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about language selection.">
-                <input type="checkbox" checked={useCotLanguage} onChange={() => setUseCotLanguage(!useCotLanguage)} className={checkboxClassName} />
-                {t('useCotLanguage')}
-              </label>
+              {!shouldHideCotControls && <>
+                <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about metadata like BPM, key, duration.">
+                  <input type="checkbox" checked={useCotMetas} onChange={() => setUseCotMetas(!useCotMetas)} className={checkboxClassName} />
+                  {t('useCotMetas')}
+                </label>
+                <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about the caption/style text.">
+                  <input type="checkbox" checked={useCotCaption} onChange={() => setUseCotCaption(!useCotCaption)} className={checkboxClassName} />
+                  {t('useCotCaption')}
+                </label>
+                <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Let the LM reason about language selection.">
+                  <input type="checkbox" checked={useCotLanguage} onChange={() => setUseCotLanguage(!useCotLanguage)} className={checkboxClassName} />
+                  {t('useCotLanguage')}
+                </label>
+              </>}
               <label className="flex items-top gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-400" title="Auto-generate missing fields when possible.">
                 <input type="checkbox" checked={autogen} onChange={() => setAutogen(!autogen)} className={checkboxClassName} />
                 {t('autogen')}
@@ -3473,6 +4111,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({
 
       {/* Footer Create Button */}
       <div className="p-4 mt-auto sticky bottom-0 bg-zinc-50/95 dark:bg-suno-panel/95 backdrop-blur-sm z-10 border-t border-zinc-200 dark:border-white/5 space-y-3">
+        {generationValidationError && (
+          <div className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-600 dark:text-rose-400">
+            {generationValidationError}
+          </div>
+        )}
         <button
           onClick={handleGenerate}
           className="w-full h-12 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all transform active:scale-[0.98] apex-accent-fill shadow-lg"

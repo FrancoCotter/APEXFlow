@@ -72,6 +72,10 @@ Thumbs.db
 .cache/
 *.cache
 
+# Local HTTPS tooling and generated credentials
+.tools/
+certs/local/
+
 # Test coverage
 coverage/
 

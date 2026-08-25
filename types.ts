@@ -108,6 +108,7 @@ export interface GenerationParams {
   sourceAudioUrl?: string;
   referenceAudioTitle?: string;
   sourceAudioTitle?: string;
+  recordingInstrument?: string;
   audioCodes?: string;
   repaintingStart?: number;
   repaintingEnd?: number;
@@ -156,6 +157,10 @@ export interface User {
   isAdmin?: boolean;
   avatar_url?: string;
   banner_url?: string;
+  banner_box_x?: number;
+  banner_box_y?: number;
+  banner_box_width?: number;
+  banner_box_height?: number;
 }
 
 export interface UserProfile {

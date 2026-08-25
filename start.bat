@@ -1,6 +1,7 @@
 @echo off
 REM APEXFlow Startup Script for Windows
 setlocal
+cd /d "%~dp0"
 
 echo ==================================
 echo   APEXFlow (Windows)
@@ -21,6 +22,25 @@ if not exist "server\node_modules" (
     pause
     exit /b 1
 )
+
+set "APP_SCHEME=http"
+set "USE_HTTPS=0"
+choice /C YN /N /M "Start APEXFlow with HTTPS? [Y/N]: "
+if errorlevel 2 goto protocol_ready
+
+if not exist "%~dp0certs\local\apexflow-cert.pem" goto missing_https
+if not exist "%~dp0certs\local\apexflow-key.pem" goto missing_https
+set "APP_SCHEME=https"
+set "USE_HTTPS=1"
+goto protocol_ready
+
+:missing_https
+echo.
+echo HTTPS certificate was not found.
+echo Run enable-https.bat first. APEXFlow will continue with HTTP this time.
+echo.
+
+:protocol_ready
 
 REM Get local IP for LAN access
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
@@ -48,7 +68,11 @@ timeout /t 3 /nobreak >nul
 
 REM Start frontend in new window
 echo Starting frontend...
-start "APEXFlow Frontend" cmd /k "npm run dev"
+if "%USE_HTTPS%"=="1" (
+    start "APEXFlow Frontend" cmd /k "set APEXFLOW_HTTPS=true&&npm run dev"
+) else (
+    start "APEXFlow Frontend" cmd /k "set APEXFLOW_HTTPS=false&&npm run dev"
+)
 
 REM Wait a moment
 timeout /t 2 /nobreak >nul
@@ -58,11 +82,11 @@ echo ==================================
 echo   APEXFlow Running!
 echo ==================================
 echo.
-echo   Frontend: http://localhost:3000
+echo   Frontend: %APP_SCHEME%://localhost:3000
 echo   Backend:  http://localhost:3001
 echo.
 if defined LOCAL_IP (
-    echo   LAN Access: http://%LOCAL_IP%:3000
+    echo   LAN Access: %APP_SCHEME%://%LOCAL_IP%:3000
     echo.
 )
 echo   Close the terminal windows to stop.
@@ -71,6 +95,6 @@ echo ==================================
 echo.
 echo Opening browser...
 timeout /t 2 /nobreak >nul
-start http://localhost:3000
+start %APP_SCHEME%://localhost:3000
 
 pause

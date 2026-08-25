@@ -69,6 +69,12 @@ for people who want to run ACE-Step on their own machine.
 
 ## ✨ What Changed
 
+> **August 24, 2026 — Latest additions:**
+>
+> **🎛️ Audio Transformation & Recording** — **APEXFlow now supports four new generation modes: Lego (layer an instrument or vocal track onto existing audio), Extract (isolate a specific track from a source), Complete (fill in missing track classes), and a mic recording workflow that lets you hum or play an idea directly in the browser and render it as any chosen instrument. Lego, Extract, and Complete require a Base model.**
+>
+> **🔒 HTTPS & LAN Access** — **APEXFlow can now run over HTTPS on your local network with a single one-time setup script (`enable-https.sh` / `enable-https.bat`). This is especially important for the microphone recording feature: browsers block mic access on non-secure origins, so HTTPS is required when recording from any device other than localhost.**
+
 This fork transforms the original client into a streamlined, local-first music station. The key changes focus on model flexibility, generation parameters, lyrics review, and minimalist design:
 
 ### 🧠 Generation & Model Optimizations
@@ -91,6 +97,16 @@ This fork transforms the original client into a streamlined, local-first music s
 * **Interface Cleanup**: Removed unnecessary, irrelevant icons and clutter from the player and sidebar to ensure a focused, local-first studio workspace.
 * **Liquid Cover Backgrounds**: Fully reworked the fullscreen visualizer with liquid gradients generated dynamically from the active song's cover art.
 
+### 🎛️ Audio Transformation & Recording
+* **Lego Mode**: Layer a specific instrument or vocal track on top of an existing source audio. Requires a Base model.
+* **Extract Mode**: Isolate and pull out a specific instrument or vocal track from a source recording. Requires a Base model.
+* **Complete Mode**: Automatically fill in missing track classes to complete a partial audio source. Requires a Base model.
+* **Microphone Recording → Instrument Cover**: Hum a melody or record any idea directly in the browser, pick a target instrument, and let ACE-Step render it as a full-quality instrumental performance.
+
+### 🔒 HTTPS & LAN Access
+* **Local HTTPS Support**: Run `enable-https.sh` (or `enable-https.bat` on Windows) once to generate a trusted local certificate via `mkcert`. After that, `start.sh` / `start.bat` will prompt whether to launch in HTTPS mode.
+* **Required for LAN Microphone**: Browsers block microphone access on non-secure origins. HTTPS is needed when using the mic recording feature from another device on your local network.
+
 ## 🚀 Features
 
 | Area | Highlights |
@@ -100,6 +116,7 @@ This fork transforms the original client into a streamlined, local-first music s
 | **Lyrics** | Static lyrics, dynamic LRC/VTT lyrics, clickable seek, fullscreen lyric stage |
 | **Library** | Search, likes, playlists, song details, play counts, cached covers |
 | **Scores** | ACE-Step diagnostic score display when scorer output is available |
+| **Audio transformation** | Lego (add track), Extract (isolate track), Complete (fill missing classes), mic recording → instrument cover |
 | **Local-first data** | SQLite database, local audio files, local cover cache |
 
 *Note: APEXFlow also includes secondary utilities like a basic **Video Studio** (which supports Pexels stock video search, visual preset overlays, and dynamic LRC lyric rendering on exported videos) and built-in **Audio Editor** / **Stem Separation** links.*
@@ -211,6 +228,24 @@ Navigate into the `APEXFlow` directory and run the installation script:
   ./setup.sh
   ```
 
+### Step 4 (Optional): Enable HTTPS
+
+HTTPS is required for **microphone recording** to work over a LAN connection — browsers block mic access on non-secure origins. If you only use APEXFlow on `localhost`, you can skip this step.
+
+* **macOS / Linux**:
+  ```bash
+  ./enable-https.sh
+  ```
+* **Windows**:
+  ```batch
+  enable-https.bat
+  ```
+
+This script downloads `mkcert`, installs a local certificate authority into your system trust store, and generates a certificate for `localhost` and your current LAN IP. Run it once — the certificate persists across restarts.
+
+> [!NOTE]
+> If another device on your LAN needs to trust the certificate, copy `certs/local/apexflow-rootCA.pem` to that device and add it to its trust store. See `docs/HTTPS_SETUP.md` for step-by-step instructions.
+
 ---
 
 ## ▶️ Running & Enjoying Music
@@ -230,7 +265,7 @@ Use this option to launch APEXFlow directly. There is no need to start any separ
   ./start.sh
   ```
 
-Once launched, open **`http://localhost:3000`** in your browser and enjoy creating music!
+When the script starts, it will ask **"Start with HTTPS?"** — choose `Y` if you completed Step 4, otherwise press Enter to continue with HTTP. Once running, open the URL shown in your terminal (`http://localhost:3000` or `https://localhost:3000`) in your browser and enjoy creating music!
 * *Why it is recommended*: You get detailed, real-time stage progress updates in the UI, and your GPU memory is automatically freed immediately after each song generates.
 
 ### Option B: Gradio API Mode (Alternative ⚠️)

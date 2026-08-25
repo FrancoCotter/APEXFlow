@@ -1367,6 +1367,7 @@ function AppContent() {
         sourceAudioUrl: params.sourceAudioUrl,
         referenceAudioTitle: params.referenceAudioTitle,
         sourceAudioTitle: params.sourceAudioTitle,
+        recordingInstrument: params.recordingInstrument,
         audioCodes: params.audioCodes,
         repaintingStart: params.repaintingStart,
         repaintingEnd: params.repaintingEnd,

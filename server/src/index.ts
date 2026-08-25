@@ -24,15 +24,30 @@ import generateRoutes from './routes/generate.js';
 import usersRoutes from './routes/users.js';
 import playlistsRoutes from './routes/playlists.js';
 import contactRoutes from './routes/contact.js';
-import referenceTrackRoutes from './routes/referenceTrack.js';
+import referenceTrackRoutes, { cleanupExpiredTemporaryRecordings } from './routes/referenceTrack.js';
 import loraRoutes from './routes/lora.js';
 import trainingRoutes from './routes/training.js';
 import { pool } from './db/pool.js';
 import './db/migrate.js';
+import { getActiveTemporaryRecordingUrls } from './services/acestep.js';
 
 const app = express();
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const cleanupTemporaryRecordings = async () => {
+  try {
+    const removed = await cleanupExpiredTemporaryRecordings(getActiveTemporaryRecordingUrls());
+    if (removed > 0) console.log(`Cleaned up ${removed} expired temporary recording(s)`);
+  } catch (error) {
+    console.error('Temporary recording cleanup failed:', error);
+  }
+};
+
+const temporaryRecordingCleanupTimer = setInterval(() => {
+  void cleanupTemporaryRecordings();
+}, 10 * 60 * 1000);
+temporaryRecordingCleanupTimer.unref();
 
 // Security headers
 app.use(helmet({
@@ -550,6 +565,7 @@ app.listen(config.port, '0.0.0.0', () => {
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`ACE-Step API: ${config.acestep.apiUrl}`);
   console.log(`Generation timeout: ${Math.round(config.generationTimeoutMs / 1000)}s`);
+  void cleanupTemporaryRecordings();
 
   // Show LAN access info
   import('os').then(os => {

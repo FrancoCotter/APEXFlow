@@ -9,11 +9,47 @@ import { authMiddleware, AuthenticatedRequest } from '../middleware/auth.js';
 import { getStorageProvider } from '../services/storage/factory.js';
 import { spawn } from 'child_process';
 import { normalizeUploadedFilename } from '../utils/filename.js';
+import { randomUUID } from 'crypto';
 
 const router = Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AUDIO_DIR = path.join(__dirname, '../../public/audio');
+const TEMP_RECORDING_DIR = path.join(AUDIO_DIR, 'temporary-recordings');
+const TEMP_RECORDING_TTL_MS = 60 * 60 * 1000;
+
+const safePathSegment = (value: string): string => value.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+export async function cleanupExpiredTemporaryRecordings(
+  activeUrls: ReadonlySet<string> = new Set(),
+): Promise<number> {
+  await fs.mkdir(TEMP_RECORDING_DIR, { recursive: true });
+  const now = Date.now();
+  let removed = 0;
+  const userDirectories = await fs.readdir(TEMP_RECORDING_DIR, { withFileTypes: true }).catch(() => []);
+
+  for (const userDirectory of userDirectories) {
+    if (!userDirectory.isDirectory()) continue;
+    const userPath = path.join(TEMP_RECORDING_DIR, userDirectory.name);
+    const files = await fs.readdir(userPath, { withFileTypes: true }).catch(() => []);
+
+    for (const file of files) {
+      if (!file.isFile()) continue;
+      const publicUrl = `/audio/temporary-recordings/${userDirectory.name}/${file.name}`;
+      if (activeUrls.has(publicUrl)) continue;
+      const filePath = path.join(userPath, file.name);
+      const info = await fs.stat(filePath).catch(() => null);
+      if (!info || now - info.mtimeMs < TEMP_RECORDING_TTL_MS) continue;
+      await fs.rm(filePath, { force: true });
+      removed += 1;
+    }
+
+    const remaining = await fs.readdir(userPath).catch(() => []);
+    if (remaining.length === 0) await fs.rmdir(userPath).catch(() => undefined);
+  }
+
+  return removed;
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -64,6 +100,58 @@ const findWhisperExecutable = async (): Promise<string | null> => {
   }
   return null;
 };
+
+// Microphone recordings are disposable source clips. They intentionally bypass
+// the reference_tracks table and are cleaned up by explicit deletion or TTL.
+router.post('/recording', authMiddleware, upload.single('audio'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No recording uploaded' });
+      return;
+    }
+
+    const userDirectory = safePathSegment(req.user!.id);
+    const recordingId = randomUUID();
+    const originalFilename = normalizeUploadedFilename(req.file.originalname);
+    const ext = path.extname(originalFilename) || '.wav';
+    const filename = `${Date.now()}-${recordingId}${ext}`;
+    const directory = path.join(TEMP_RECORDING_DIR, userDirectory);
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, filename), req.file.buffer);
+
+    res.status(201).json({
+      recording_id: recordingId,
+      track: {
+        filename: originalFilename,
+        audio_url: `/audio/temporary-recordings/${userDirectory}/${filename}`,
+        temporary: true,
+      },
+    });
+  } catch (error) {
+    console.error('Temporary recording upload error:', error);
+    res.status(500).json({ error: 'Failed to save temporary recording' });
+  }
+});
+
+router.delete('/recording/:recordingId', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const recordingId = req.params.recordingId;
+  if (!/^[0-9a-f-]{36}$/i.test(recordingId)) {
+    res.status(400).json({ error: 'Invalid recording ID' });
+    return;
+  }
+
+  try {
+    const userDirectory = safePathSegment(req.user!.id);
+    const directory = path.join(TEMP_RECORDING_DIR, userDirectory);
+    const files = await fs.readdir(directory).catch(() => []);
+    const matchingFile = files.find(file => file.includes(`-${recordingId}.`));
+    if (matchingFile) await fs.rm(path.join(directory, matchingFile), { force: true });
+    res.status(204).end();
+  } catch (error) {
+    console.error('Temporary recording delete error:', error);
+    res.status(500).json({ error: 'Failed to delete temporary recording' });
+  }
+});
 
 const transcribeWithWhisper = async (buffer: Buffer, originalFilename: string, signal?: AbortSignal): Promise<string | null> => {
   const whisperCmd = await findWhisperExecutable();

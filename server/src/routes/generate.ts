@@ -441,6 +441,7 @@ interface GenerateBody {
   sourceAudioUrl?: string;
   referenceAudioTitle?: string;
   sourceAudioTitle?: string;
+  recordingInstrument?: string;
   audioCodes?: string;
   repaintingStart?: number;
   repaintingEnd?: number;
@@ -861,6 +862,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       sourceAudioUrl,
       referenceAudioTitle,
       sourceAudioTitle,
+      recordingInstrument,
       audioCodes,
       repaintingStart,
       repaintingEnd,
@@ -892,6 +894,21 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       dcwWavelet,
       vaeModel,
     } = req.body as GenerateBody;
+
+    if (recordingInstrument) {
+      if (!sourceAudioUrl) {
+        res.status(400).json({ error: 'Recorded instrument generation requires source audio' });
+        return;
+      }
+      if (taskType !== 'cover' && taskType !== 'audio2audio') {
+        res.status(400).json({ error: 'Recorded instrument generation must use task_type=cover' });
+        return;
+      }
+      if (typeof duration === 'number' && duration > 90) {
+        res.status(400).json({ error: 'Recorded instrument clips are limited to 90 seconds' });
+        return;
+      }
+    }
 
     if (!customMode && !songDescription) {
       res.status(400).json({ error: 'Song description required for simple mode' });
@@ -1008,6 +1025,7 @@ router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response
       sourceAudioUrl,
       referenceAudioTitle,
       sourceAudioTitle,
+      recordingInstrument,
       audioCodes,
       repaintingStart,
       repaintingEnd,
